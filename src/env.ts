@@ -1,3 +1,5 @@
+import { DurableObject } from 'cloudflare:workers';
+
 export interface Env {
   LOADER: WorkerLoader;
   WORKFLOW: DurableObjectNamespace<WorkflowStateDO>;
@@ -32,31 +34,30 @@ export interface Entrypoint {
   fetch(request: Request): Promise<Response>;
 }
 
-export class WorkflowStateDO implements DurableObject {
+export class WorkflowStateDO extends DurableObject<Env> {
   private state: WorkflowState | null = null;
-  private ctx!: DurableObjectStorage;
 
-  async initialize(state: DurableObjectState, _env: Env): Promise<void> {
-    this.state = await state.storage.get<WorkflowState>('workflow');
-    this.ctx = state.storage;
-
-    if (!this.state) {
-      this.state = createInitialState(crypto.randomUUID(), '', '', '');
-      await this.save();
-    }
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    ctx.blockConcurrencyWhile(async () => {
+      this.state = (await ctx.storage.get<WorkflowState>('workflow')) ?? null;
+      if (!this.state) {
+        this.state = createInitialState(crypto.randomUUID(), '', '', '');
+        await ctx.storage.put('workflow', this.state);
+      }
+    });
   }
 
   private async save(): Promise<void> {
     if (!this.state) {
-return;
-}
+      return;
+    }
     this.state.updatedAt = Date.now();
-    await this.ctx.put('workflow', this.state);
+    await this.ctx.storage.put('workflow', this.state);
   }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    const method = request.method.toUpperCase();
 
     switch (url.pathname) {
       case '/init':
@@ -71,8 +72,6 @@ return;
         return this.handleSetStep(request);
       case '/set-error':
         return this.handleSetError(request);
-      case '/reset':
-        return this.handleReset();
       case '/approve':
         return this.handleApprove();
       case '/retry':
@@ -84,8 +83,8 @@ return;
     }
   }
 
-  private handleInit(request: Request): Response {
-    const { topic, userId, channelId } = request.json() as {
+  private async handleInit(request: Request): Promise<Response> {
+    const { topic, userId, channelId } = await request.json() as {
       topic: string;
       userId: string;
       channelId: string;
@@ -97,7 +96,7 @@ return;
 
     this.state = createInitialState(crypto.randomUUID(), topic, userId, channelId);
     this.state.currentStep = 'RESEARCH';
-    this.save();
+    await this.save();
 
     return Response.json({ workflow: this.state });
   }
@@ -109,7 +108,7 @@ return;
     });
   }
 
-  private handleAdvance(): Response {
+  private async handleAdvance(): Promise<Response> {
     if (!this.state) {
       return Response.json({ error: 'No workflow' }, { status: 400 });
     }
@@ -120,60 +119,60 @@ return;
     }
 
     this.state.currentStep = nextStep;
-    this.save();
+    await this.save();
 
     return Response.json({ workflow: this.state });
   }
 
-  private handleSetData(request: Request): Response {
-    const { key, value } = request.json() as { key: keyof WorkflowData; value: string };
+  private async handleSetData(request: Request): Promise<Response> {
+    const { key, value } = await request.json() as { key: keyof WorkflowData; value: string };
     if (!this.state || !key) {
       return Response.json({ error: 'Missing key' }, { status: 400 });
     }
 
     (this.state.data as Record<string, unknown>)[key] = value;
-    this.save();
+    await this.save();
 
     return Response.json({ workflow: this.state });
   }
 
-  private handleSetStep(request: Request): Response {
-    const { step } = request.json() as { step: WorkflowStep };
+  private async handleSetStep(request: Request): Promise<Response> {
+    const { step } = await request.json() as { step: WorkflowStep };
     if (!this.state || !step) {
       return Response.json({ error: 'Missing step' }, { status: 400 });
     }
 
     this.state.currentStep = step;
-    this.save();
+    await this.save();
 
     return Response.json({ workflow: this.state });
   }
 
-  private handleSetError(request: Request): Response {
-    const { message } = request.json() as { message: string };
+  private async handleSetError(request: Request): Promise<Response> {
+    const { message } = await request.json() as { message: string };
     if (!this.state) {
       return Response.json({ error: 'No workflow' }, { status: 400 });
     }
 
     this.state.currentStep = 'ERROR';
     this.state.data.errorMessage = message;
-    this.save();
+    await this.save();
 
     return Response.json({ workflow: this.state });
   }
 
-  private handleApprove(): Response {
+  private async handleApprove(): Promise<Response> {
     if (!this.state || !isApprovalStep(this.state.currentStep)) {
       return Response.json({ error: 'Not in approval state' }, { status: 400 });
     }
 
     this.state.currentStep = 'PUBLISHED';
-    this.save();
+    await this.save();
 
     return Response.json({ workflow: this.state });
   }
 
-  private handleRetry(): Response {
+  private async handleRetry(): Promise<Response> {
     if (!this.state || !isErrorRecoverable(this.state.currentStep)) {
       return Response.json({ error: 'Cannot retry from current state' }, { status: 400 });
     }
@@ -182,12 +181,12 @@ return;
     const retryFromStep = STEP_SEQUENCE[currentIdx - 1] || 'RESEARCH';
     this.state.currentStep = retryFromStep;
     this.state.data.errorMessage = undefined;
-    this.save();
+    await this.save();
 
     return Response.json({ workflow: this.state });
   }
 
-  private handleCancel(): Response {
+  private async handleCancel(): Promise<Response> {
     if (!this.state) {
       return Response.json({ error: 'No workflow' }, { status: 400 });
     }
@@ -195,7 +194,7 @@ return;
     this.state.currentStep = 'IDLE';
     this.state.data = {};
     this.state.data.errorMessage = undefined;
-    this.save();
+    await this.save();
 
     return Response.json({ workflow: this.state });
   }

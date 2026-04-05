@@ -61,7 +61,7 @@ return null;
       throw new Error(`GitHub API error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as { sha?: string };
     return data.sha || null;
   }
 

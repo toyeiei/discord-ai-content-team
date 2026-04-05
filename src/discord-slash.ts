@@ -250,9 +250,13 @@ return;
 
       if (!workflow ||
           workflow.currentStep === 'IDLE' ||
-          workflow.currentStep === 'AWAITING_APPROVAL' ||
           workflow.currentStep === 'PUBLISHED' ||
           workflow.currentStep === 'ERROR') {
+        break;
+      }
+
+      if (workflow.currentStep === 'AWAITING_APPROVAL') {
+        await this.sendApprovalRequest(workflowStub, userId, workflowChannels);
         break;
       }
 
@@ -297,11 +301,6 @@ return;
       }
 
       await workflowStub.fetch(new Request('http://localhost/advance', { method: 'POST' }));
-
-      if (workflow.currentStep === 'FINAL') {
-        await this.sendApprovalRequest(workflowStub, userId, workflowChannels);
-        break;
-      }
     }
   }
 

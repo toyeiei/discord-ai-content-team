@@ -26,6 +26,7 @@ new_sqlite_classes = [ "WorkflowStateDO" ]
 # Env vars (set via wrangler secret)
 # MINIMAX_API_KEY
 # DISCORD_BOT_TOKEN
+# DISCORD_APP_ID
 # GITHUB_TOKEN
 # GITHUB_REPO
 # EXA_API_KEY

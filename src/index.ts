@@ -1,6 +1,7 @@
 import { WorkflowStateDO } from './env';
 import type { Env } from './env';
 import { DiscordSlashHandler } from './discord-slash';
+import type { DiscordInteraction } from './discord-slash';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -13,7 +14,7 @@ export default {
     // Discord Slash Command endpoint
     if (url.pathname === '/discord' && request.method === 'POST') {
       try {
-        const body = await request.json();
+        const body = await request.json() as DiscordInteraction;
         const handler = new DiscordSlashHandler(env);
         const response = await handler.handleInteraction(body);
         return Response.json(response);

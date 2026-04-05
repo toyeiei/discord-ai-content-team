@@ -6,8 +6,6 @@
  *   npx tsx register-commands.ts
  */
 
-import fs from 'fs';
-
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const DISCORD_APP_ID = process.env.DISCORD_APP_ID;
 const WORKER_URL = process.env.WORKFLOW_URL?.replace('/workflow', '/discord');
@@ -16,7 +14,7 @@ if (!DISCORD_BOT_TOKEN || !DISCORD_APP_ID || !WORKER_URL) {
   console.error('Missing required env vars:');
   if (!DISCORD_BOT_TOKEN) console.error('  - DISCORD_BOT_TOKEN');
   if (!DISCORD_APP_ID) console.error('  - DISCORD_APP_ID');
-  if (!WORKFLOW_URL) console.error('  - WORKFLOW_URL');
+  if (!WORKER_URL) console.error('  - WORKFLOW_URL (used to derive worker Discord endpoint)');
   process.exit(1);
 }
 

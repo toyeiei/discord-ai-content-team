@@ -27,7 +27,7 @@ export async function searchWeb(query: string, apiKey: string): Promise<SearchRe
       throw new Error(`Exa API error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as { results?: SearchResult[] };
     return data.results || [];
   } catch (error) {
     console.error('Exa search failed:', error);

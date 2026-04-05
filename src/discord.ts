@@ -26,9 +26,9 @@ export class DiscordBot {
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageReactions,
+        GatewayIntentBits.GuildMessageReactions,
       ],
-      partials: [Partials.Channel, Partials.DirectMessage, Partials.Message, Partials.Reaction],
+      partials: [Partials.Channel, Partials.Message, Partials.Reaction],
     });
 
     this.miniMax = new MiniMaxClient(env.MINIMAX_API_KEY);
