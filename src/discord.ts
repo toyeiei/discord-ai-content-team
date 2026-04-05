@@ -25,8 +25,10 @@ export class DiscordBot {
         GatewayIntentBits.DirectMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageReactions,
       ],
-      partials: [Partials.Channel, Partials.DirectMessage],
+      partials: [Partials.Channel, Partials.DirectMessage, Partials.Message, Partials.Reaction],
     });
 
     this.miniMax = new MiniMaxClient(env.MINIMAX_API_KEY);
@@ -43,6 +45,22 @@ export class DiscordBot {
       if (message.channel instanceof DMChannel && !message.author.bot) {
         await this.handleDM(message);
       }
+    });
+
+    this.client.on('messageReactionAdd', async (reaction, user) => {
+      if (user.bot) {
+return;
+}
+
+      const channelId = reaction.message.channelId;
+      const userId = user.id;
+      const emoji = reaction.emoji.name;
+
+      await fetch(`${this.env.WORKFLOW_URL}/reaction`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, channelId, emoji }),
+      });
     });
   }
 

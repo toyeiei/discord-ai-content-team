@@ -23,6 +23,19 @@ export default {
       }
     }
 
+    // Reaction handler endpoint (called by Discord message reaction events)
+    if (url.pathname === '/reaction' && request.method === 'POST') {
+      try {
+        const body = await request.json() as { userId: string; channelId: string; emoji: string };
+        const handler = new DiscordSlashHandler(env);
+        await handler.handleReaction(body.userId, body.channelId, body.emoji);
+        return Response.json({ ok: true });
+      } catch (error) {
+        console.error('Reaction handler error:', error);
+        return Response.json({ error: 'Internal error' }, { status: 500 });
+      }
+    }
+
     if (url.pathname === '/workflow' && request.method === 'POST') {
       const body = await request.json() as { 
         action: string; 
