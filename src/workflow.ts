@@ -23,9 +23,15 @@ export function parseSocialPosts(
   content: string,
 ): { facebook: string; twitter: string; linkedin: string } {
   const r = { facebook: '', twitter: '', linkedin: '' };
-  const fb = content.match(/\*\*Facebook:\*\*\s*\n([\s\S]*?)(?=\n\*\*|$)/i);
-  const tw = content.match(/\*\*X\/Twitter:\*\*\s*\n([\s\S]*?)(?=\n\*\*|$)/i);
-  const li = content.match(/\*\*LinkedIn:\*\*\s*\n([\s\S]*?)(?=\n\*\*|$)/i);
+  
+  // Remove markdown bold markers for cleaner parsing
+  const clean = content.replace(/\*\*/g, '');
+  
+  // Match content between platform headers
+  const fb = clean.match(/facebook[:\s]*\n?([\s\S]*?)(?=\n\s*(?:x|twitter|linkedin)|$)/i);
+  const tw = clean.match(/(?:x|twitter)[:\s]*\n?([\s\S]*?)(?=\n\s*linkedin|$)/i);
+  const li = clean.match(/linkedin[:\s]*\n?([\s\S]*?)$/i);
+  
   if (fb) r.facebook = fb[1].trim();
   if (tw) r.twitter = tw[1].trim();
   if (li) r.linkedin = li[1].trim();
@@ -234,47 +240,21 @@ export class ContentWorkflow extends WorkflowEntrypoint<Env, WorkflowParams> {
     // SOCIAL - NO RETRIES, runs once
     await postToChannel(channels.social, '📱 **Social Phase** - Creating posts...', botToken);
     const socialContent = await miniMax.chat([{ role: 'user', content: SOCIAL_PROMPT.replace('{blog}', finalBlog) }], { maxTokens: 1600 });
+    
+    // Post raw content first for debugging
+    await postToChannel(channels.social, `📱 **Social Phase Raw Output:**\n\n${socialContent}`, botToken);
+    
     const { facebook, twitter, linkedin } = parseSocialPosts(socialContent);
     
-    await postToChannel(channels.social, `✅ **Social Phase Complete**\n\n**Facebook:**\n${facebook}`, botToken);
-    await postToChannel(channels.social, `**X/Twitter:**\n${twitter}`, botToken);
-    await postToChannel(channels.social, `**LinkedIn:**\n${linkedin}`, botToken);
+    await postToChannel(channels.social, `✅ **Social Posts**\n\n**Facebook:**\n${facebook || '(empty)'}`, botToken);
+    await postToChannel(channels.social, `**X/Twitter:**\n${twitter || '(empty)'}`, botToken);
+    await postToChannel(channels.social, `**LinkedIn:**\n${linkedin || '(empty)'}`, botToken);
     
     const socialPosts = JSON.stringify({ facebook, twitter, linkedin });
 
-    // APPROVAL - in final channel
-    await sendApprovalMessage(channels.final, finalBlog, socialPosts, botToken);
-    const { payload } = await step.waitForEvent<ApprovalPayload>('await-approval', {
-      type: 'approval',
-      timeout: '24 hours',
-    });
-
-    if (payload.approved) {
-      await step.do('publish', async () => {
-        await postToChannel(channels.final, '🚀 **Publishing** - Uploading to GitHub Pages...', botToken);
-        const path = await publish(topic, finalBlog, socialPosts, this.env);
-        await postToChannel(channels.final, `🎉 **Published!** → GitHub Pages: \`${path}\``, botToken);
-      });
-    } else {
-      // Revision loop
-      const { finalBlog: revFinal, socialPosts: revSocial } = await runRevision(
-        topic, finalBlog, channels, botToken, miniMax,
-      );
-
-      const { payload: p2 } = await step.waitForEvent<ApprovalPayload>('await-revision', {
-        type: 'approval',
-        timeout: '24 hours',
-      });
-
-      if (p2.approved) {
-        await step.do('revise-publish', async () => {
-          await postToChannel(channels.final, '🚀 **Publishing** - Uploading to GitHub Pages...', botToken);
-          const path = await publish(topic, revFinal, revSocial, this.env);
-          await postToChannel(channels.final, `🎉 **Published!** → GitHub Pages: \`${path}\``, botToken);
-        });
-      } else {
-        await postToChannel(channels.final, 'Workflow ended. Use `/create` to start over.', botToken);
-      }
-    }
+    // PUBLISH - No approval, fully autonomous
+    await postToChannel(channels.final, '🚀 **Publishing** - Uploading to GitHub Pages...', botToken);
+    const path = await publish(topic, finalBlog, socialPosts, this.env);
+    await postToChannel(channels.final, `🎉 **Published!** → GitHub Pages: \`${path}\``, botToken);
   }
 }
