@@ -14,17 +14,25 @@ export class MiniMaxClient {
   }
 
   async chat(messages: MiniMaxMessage[], options: { temperature?: number; maxTokens?: number } = {}): Promise<string> {
-    const res = await fetch(`${this.baseUrl}/text/chatcompletion_v2`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}` },
-      body: JSON.stringify({ model: this.model, messages, temperature: options.temperature ?? 0.7, max_tokens: options.maxTokens ?? 4096 }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60_000); // 60s timeout
+    
+    try {
+      const res = await fetch(`${this.baseUrl}/text/chatcompletion_v2`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}` },
+        body: JSON.stringify({ model: this.model, messages, temperature: options.temperature ?? 0.7, max_tokens: options.maxTokens ?? 4096 }),
+        signal: controller.signal,
+      });
 
-    if (!res.ok) throw new Error(`MiniMax API error: ${res.status} - ${await res.text()}`);
+      if (!res.ok) throw new Error(`MiniMax API error: ${res.status} - ${await res.text()}`);
 
-    const data = await res.json() as { choices: Array<{ message: { content: string } }> };
-    if (!data.choices?.[0]) throw new Error('No response from MiniMax');
-    return data.choices[0].message.content;
+      const data = await res.json() as { choices: Array<{ message: { content: string } }> };
+      if (!data.choices?.[0]) throw new Error('No response from MiniMax');
+      return data.choices[0].message.content;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   async chatWithRetry(messages: MiniMaxMessage[], options: { temperature?: number; maxTokens?: number; retries?: number } = {}): Promise<string> {
