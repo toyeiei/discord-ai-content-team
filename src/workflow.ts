@@ -14,31 +14,6 @@ export interface WorkflowParams {
   channels: WorkflowChannels;
 }
 
-export function parseSocialPosts(
-  content: string,
-): { facebook: string; twitter: string; linkedin: string } {
-  const r = { facebook: '', twitter: '', linkedin: '' };
-  
-  // Remove markdown bold markers for cleaner parsing
-  const clean = content.replace(/\*\*/g, '');
-  
-  // Match content between platform headers - fixed Twitter regex to handle "X/Twitter"
-  const fb = clean.match(/facebook[:\s]*\n?([\s\S]*?)(?=\n\s*(?:x\/twitter|twitter|linkedin)|$)/i);
-  const tw = clean.match(/(?:x\/twitter|twitter)[:\s]*\n?([\s\S]*?)(?=\n\s*linkedin|$)/i);
-  const li = clean.match(/linkedin[:\s]*\n?([\s\S]*?)$/i);
-  
-  if (fb) {
-r.facebook = fb[1].trim();
-}
-  if (tw) {
-r.twitter = tw[1].trim();
-}
-  if (li) {
-r.linkedin = li[1].trim();
-}
-  return r;
-}
-
 // ---------------------------------------------------------------------------
 // Prompt Templates
 // ---------------------------------------------------------------------------
@@ -100,25 +75,26 @@ Edited draft:
 
 Return only the final polished blog post.`;
 
-const SOCIAL_PROMPT = `You are a social media strategist. Create 3 social media posts based on this blog post.
+const FACEBOOK_PROMPT = `You are a social media strategist. Write a Facebook post based on this blog post.
 
 Blog post:
 {blog}
 
-**CRITICAL character limits:**
-- Facebook: max 320 characters
-- X/Twitter: max 280 characters
-- LinkedIn: max 900 characters
+**CRITICAL: Keep it under 320 characters. Make it engaging and include a call to action if appropriate.**`;
 
-Format exactly as:
-**Facebook:**
-[post]
+const TWITTER_PROMPT = `You are a social media strategist. Write an X/Twitter post based on this blog post.
 
-**X/Twitter:**
-[post]
+Blog post:
+{blog}
 
-**LinkedIn:**
-[post]`;
+**CRITICAL: Keep it under 280 characters. Make it punchy and engaging.**`;
+
+const LINKEDIN_PROMPT = `You are a social media strategist. Write a LinkedIn post based on this blog post.
+
+Blog post:
+{blog}
+
+**CRITICAL: Keep it under 900 characters. Make it professional and insightful.**`;
 
 // ---------------------------------------------------------------------------
 // Workflow
@@ -192,16 +168,23 @@ export class ContentWorkflow extends WorkflowEntrypoint<Env, WorkflowParams> {
     await postToChannel(channels.final, `✅ **Final Phase Complete**\n\n${finalBlog}`, botToken);
 
     // SOCIAL
-    const socialContent = await step.do('social', async () => {
-      await postToChannel(channels.social, '📱 **Social Phase** - Creating posts...', botToken);
-      return await miniMax.chat([{ role: 'user', content: SOCIAL_PROMPT.replace('{blog}', finalBlog) }], { maxTokens: 1600 });
+    const facebook = await step.do('social-facebook', async () => {
+      await postToChannel(channels.social, '📱 **Social Phase** - Creating Facebook post...', botToken);
+      return await miniMax.chat([{ role: 'user', content: FACEBOOK_PROMPT.replace('{blog}', finalBlog) }], { maxTokens: 320 });
     });
-    
-    const { facebook, twitter, linkedin } = parseSocialPosts(socialContent);
-    
-    await postToChannel(channels.social, `📱 **Facebook** (max 320)\n${facebook || '(empty)'}`, botToken);
-    await postToChannel(channels.social, `📱 **X/Twitter** (max 280)\n${twitter || '(empty)'}`, botToken);
-    await postToChannel(channels.social, `📱 **LinkedIn** (max 900)\n${linkedin || '(empty)'}`, botToken);
+    await postToChannel(channels.social, `✅ **Facebook**\n${facebook}`, botToken);
+
+    const twitter = await step.do('social-twitter', async () => {
+      await postToChannel(channels.social, '📱 **Social Phase** - Creating X/Twitter post...', botToken);
+      return await miniMax.chat([{ role: 'user', content: TWITTER_PROMPT.replace('{blog}', finalBlog) }], { maxTokens: 280 });
+    });
+    await postToChannel(channels.social, `✅ **X/Twitter**\n${twitter}`, botToken);
+
+    const linkedin = await step.do('social-linkedin', async () => {
+      await postToChannel(channels.social, '📱 **Social Phase** - Creating LinkedIn post...', botToken);
+      return await miniMax.chat([{ role: 'user', content: LINKEDIN_PROMPT.replace('{blog}', finalBlog) }], { maxTokens: 900 });
+    });
+    await postToChannel(channels.social, `✅ **LinkedIn**\n${linkedin}`, botToken);
     
     await postToChannel(channels.social, '✅ **Social Phase Complete**', botToken);
   }
