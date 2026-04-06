@@ -96,6 +96,7 @@ Use slash commands in any channel:
 |----------|----------|-------------|
 | `DISCORD_BOT_TOKEN` | Yes | Discord bot token |
 | `DISCORD_APP_ID` | Yes | Discord application ID |
+| `DISCORD_PUBLIC_KEY` | Yes | Discord application public key |
 | `MINIMAX_API_KEY` | Yes | MiniMax API key |
 | `GITHUB_TOKEN` | Yes | GitHub personal access token |
 | `GITHUB_REPO` | Yes | GitHub repo (format: `owner/repo`) |

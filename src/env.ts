@@ -1,38 +1,30 @@
 import { DurableObject } from 'cloudflare:workers';
 
 export interface Env {
-  LOADER: WorkerLoader;
   WORKFLOW: DurableObjectNamespace<WorkflowStateDO>;
   CACHE: KVNamespace;
   MINIMAX_API_KEY: string;
   DISCORD_BOT_TOKEN: string;
   DISCORD_APP_ID: string;
+  DISCORD_PUBLIC_KEY: string;
   GITHUB_TOKEN: string;
   GITHUB_REPO: string;
   EXA_API_KEY?: string;
+  CHANNEL_RESEARCH: string;
+  CHANNEL_DRAFT: string;
+  CHANNEL_EDIT: string;
+  CHANNEL_FINAL: string;
+  CHANNEL_SOCIAL: string;
+  CHANNEL_APPROVAL: string;
 }
 
-export interface WorkerLoader {
-  load(code: WorkerCode): WorkerStub;
-  get(id: string, callback: () => Promise<WorkerCode>): WorkerStub;
-}
-
-export interface WorkerCode {
-  compatibilityDate: string;
-  mainModule: string;
-  modules: Record<string, string>;
-  globalOutbound?: unknown;
-  env?: Record<string, unknown>;
-  tails?: unknown[];
-}
-
-export interface WorkerStub {
-  getEntrypoint(): Entrypoint;
-}
-
-export interface Entrypoint {
-  fetch(request: Request): Promise<Response>;
-}
+export const STEP_CHANNEL_MAP: Record<string, keyof Env> = {
+  RESEARCH: 'CHANNEL_RESEARCH',
+  DRAFT: 'CHANNEL_DRAFT',
+  EDIT: 'CHANNEL_EDIT',
+  FINAL: 'CHANNEL_FINAL',
+  SOCIAL: 'CHANNEL_SOCIAL',
+};
 
 export class WorkflowStateDO extends DurableObject<Env> {
   private state: WorkflowState | null = null;

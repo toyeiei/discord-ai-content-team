@@ -1,60 +1,36 @@
 import { MiniMaxClient } from './minimax';
 import { GitHubClient, generateBlogMarkdown } from './github';
 import { runStep } from './steps';
-import type { Env } from './env';
-import type { WorkflowState } from './env';
-
-const WORKFLOW_STEPS = ['RESEARCH', 'DRAFT', 'EDIT', 'FINAL', 'SOCIAL', 'APPROVAL'] as const;
+import type { Env, WorkflowState, WorkflowStep } from './env';
+import { STEP_CHANNEL_MAP } from './env';
 
 export interface DiscordInteraction {
   type: number;
   data?: {
-    name: string;
-    options?: Array<{
-      name: string;
-      value: string;
-    }>;
+    name?: string;
+    options?: Array<{ name: string; value: string }>;
+    custom_id?: string;
   };
   token: string;
   member?: {
-    user: {
-      id: string;
-      username: string;
-    };
+    user: { id: string; username: string };
   };
   guild_id?: string;
   channel_id?: string;
+  message?: { id: string };
 }
 
-export interface DiscordResponse {
+interface DiscordButtonComponent {
   type: number;
-  data?: {
-    content?: string;
-    embeds?: Array<{
-      title?: string;
-      description?: string;
-      color?: number;
-    }>;
-    components?: Array<{
-      type: number;
-      label: string;
-      style: number;
-      custom_id: string;
-    }>;
-  };
-}
-
-interface WorkflowChannels {
-  categoryId: string;
-  channels: Record<string, string>;
+  style: number;
+  label: string;
+  custom_id: string;
 }
 
 export class DiscordSlashHandler {
   private env: Env;
   private miniMax: MiniMaxClient;
   private github: GitHubClient;
-  private userChannels: Map<string, WorkflowChannels> = new Map();
-  private approvalMessages: Map<string, string> = new Map(); // userId -> approvalChannelId
 
   constructor(env: Env) {
     this.env = env;
@@ -62,161 +38,243 @@ export class DiscordSlashHandler {
     this.github = new GitHubClient(env.GITHUB_TOKEN, env.GITHUB_REPO);
   }
 
-  async handleInteraction(body: DiscordInteraction): Promise<DiscordResponse> {
+  // --- Slash commands ---
+
+  async handleInteraction(
+    body: DiscordInteraction,
+    executionContext?: ExecutionContext,
+  ): Promise<{ type: number; data?: Record<string, unknown> }> {
     const command = body.data?.name;
 
     switch (command) {
       case 'create':
-        return this.handleCreate(body);
+        return this.handleCreate(body, executionContext);
       case 'status':
         return this.handleStatus(body);
       case 'cancel':
         return this.handleCancel(body);
       default:
-        return this.ephemeralResponse('Unknown command');
+        return this.ephemeral('Unknown command');
     }
   }
 
-  private async handleCreate(body: DiscordInteraction): Promise<DiscordResponse> {
+  // --- Button interactions ---
+
+  async handleButton(
+    body: DiscordInteraction,
+  ): Promise<{ type: number; data?: Record<string, unknown> }> {
+    const customId = body.data?.custom_id || '';
     const userId = body.member?.user.id || 'unknown';
-    const guildId = body.guild_id;
+
+    if (customId === 'approve') {
+      return this.handleApproveButton(body, userId);
+    }
+
+    if (customId === 'revise') {
+      return this.handleReviseButton(body, userId);
+    }
+
+    return this.ephemeral('Unknown action');
+  }
+
+  // --- Command handlers ---
+
+  private async handleCreate(
+    body: DiscordInteraction,
+    executionContext?: ExecutionContext,
+  ): Promise<{ type: number; data?: Record<string, unknown> }> {
+    const userId = body.member?.user.id || 'unknown';
     const topic = body.data?.options?.find((o) => o.name === 'topic')?.value || '';
 
     if (!topic) {
-      return this.ephemeralResponse('Usage: /create topic: <your blog topic>');
+      return this.ephemeral('Usage: `/create topic: <your blog topic>`');
     }
 
-    if (!guildId) {
-      return this.ephemeralResponse('Please use this command in a server channel.');
-    }
+    const task = this.runWorkflow(userId, topic).catch((error) => {
+      console.error('Workflow error:', error);
+    });
+    executionContext?.waitUntil(task);
 
-    // Start workflow in background (creates channels and processes steps)
-    this.runWorkflow(userId, guildId, topic).catch(console.error);
-
-    return {
-      type: 4,
-      data: {
-        content: `Starting workflow for: **${topic}**\n\nCreating channels...`,
-      },
-    };
+    return { type: 4, data: { content: `Starting workflow for: **${topic}**` } };
   }
 
-  private async handleStatus(body: DiscordInteraction): Promise<DiscordResponse> {
+  private async handleStatus(
+    body: DiscordInteraction,
+  ): Promise<{ type: number; data?: Record<string, unknown> }> {
     const userId = body.member?.user.id || 'unknown';
-    const workflowId = `workflow-${userId}`;
-    const workflowStub = this.env.WORKFLOW.get(this.env.WORKFLOW.idFromName(workflowId));
+    const workflow = await this.getWorkflow(userId);
 
-    try {
-      const response = await workflowStub.fetch(new Request('http://localhost/status'));
-      const { workflow } = await response.json() as { workflow: WorkflowState };
+    if (!workflow || workflow.currentStep === 'IDLE') {
+      return this.ephemeral('No active workflow. Use `/create topic: <topic>` to start one.');
+    }
 
-      if (!workflow || workflow.currentStep === 'IDLE') {
-        return this.ephemeralResponse('No active workflow. Use `/create <topic>` to start.');
+    return this.ephemeral(this.formatStatus(workflow));
+  }
+
+  private async handleCancel(
+    body: DiscordInteraction,
+  ): Promise<{ type: number; data?: Record<string, unknown> }> {
+    const userId = body.member?.user.id || 'unknown';
+    await this.callDO(userId, '/cancel', 'POST');
+    return this.ephemeral('Workflow cancelled.');
+  }
+
+  // --- Button handlers ---
+
+  private async handleApproveButton(
+    body: DiscordInteraction,
+    userId: string,
+  ): Promise<{ type: number; data?: Record<string, unknown> }> {
+    const workflow = await this.getWorkflow(userId);
+
+    if (!workflow || workflow.currentStep !== 'AWAITING_APPROVAL') {
+      return this.ephemeral('Nothing to approve.');
+    }
+
+    if (!workflow.data?.finalBlog) {
+      return this.ephemeral('No blog content to publish.');
+    }
+
+    // Publish to GitHub
+    const slug = this.github.generateSlug(workflow.topic);
+    const path = `_posts/${formatDate()}-${slug}.md`;
+    const socialPosts = typeof workflow.data.socialPosts === 'string'
+      ? JSON.parse(workflow.data.socialPosts)
+      : workflow.data.socialPosts;
+    const markdown = generateBlogMarkdown(workflow.topic, workflow.data.finalBlog, socialPosts);
+    const success = await this.github.createFile(path, markdown, `Publish: ${workflow.topic}`);
+
+    if (success) {
+      await this.callDO(userId, '/approve', 'POST');
+      await this.postToChannel(this.env.CHANNEL_APPROVAL, `Published to GitHub Pages: \`${path}\``);
+      return { type: 7, data: { content: 'Published!', components: [] } };
+    }
+
+    return this.ephemeral('Failed to publish. Check GitHub token permissions.');
+  }
+
+  private async handleReviseButton(
+    body: DiscordInteraction,
+    userId: string,
+  ): Promise<{ type: number; data?: Record<string, unknown> }> {
+    const workflow = await this.getWorkflow(userId);
+
+    if (!workflow || workflow.currentStep !== 'AWAITING_APPROVAL') {
+      return this.ephemeral('Nothing to revise.');
+    }
+
+    await this.callDO(userId, '/set-step', 'POST', { step: 'EDIT' });
+    await this.postToChannel(this.env.CHANNEL_APPROVAL, 'Going back to **EDIT** for revisions...');
+
+    // Resume workflow in background
+    const task = this.runWorkflow(userId, workflow.topic).catch((error) => {
+      console.error('Revision workflow error:', error);
+    });
+    // We can't get executionContext here, but fire-and-forget is fine for revisions
+    task.catch(() => {});
+
+    return { type: 7, data: { content: 'Revising... going back to EDIT.', components: [] } };
+  }
+
+  // --- Workflow execution ---
+
+  private async runWorkflow(userId: string, topic: string): Promise<void> {
+    const channelId = this.env.CHANNEL_APPROVAL;
+    const workflowStub = this.getStub(userId);
+
+    // Init workflow
+    await this.callStub(workflowStub, '/init', 'POST', { topic, userId, channelId });
+
+    while (true) {
+      const { workflow } = await this.callStub(workflowStub, '/status', 'GET');
+      if (!workflow || workflow.currentStep === 'IDLE' || workflow.currentStep === 'PUBLISHED' || workflow.currentStep === 'ERROR') {
+        break;
       }
 
-      return {
-        type: 4,
-        data: {
-          content: this.formatStatus(workflow),
-        },
-      };
-    } catch {
-      return this.ephemeralResponse('Could not fetch workflow status.');
-    }
-  }
-
-  private async handleCancel(body: DiscordInteraction): Promise<DiscordResponse> {
-    const userId = body.member?.user.id || 'unknown';
-    const guildId = body.guild_id;
-    const workflowId = `workflow-${userId}`;
-    const workflowStub = this.env.WORKFLOW.get(this.env.WORKFLOW.idFromName(workflowId));
-
-    try {
-      await workflowStub.fetch(new Request('http://localhost/cancel', { method: 'POST' }));
-
-      if (guildId) {
-        await this.deleteWorkflowChannels(userId, guildId);
+      if (workflow.currentStep === 'AWAITING_APPROVAL') {
+        await this.sendApprovalMessage(workflow);
+        break;
       }
 
-      return this.ephemeralResponse('Workflow cancelled and channels deleted.');
-    } catch {
-      return this.ephemeralResponse('Could not cancel workflow.');
+      // Post "processing" to the step's channel
+      const channelKey = STEP_CHANNEL_MAP[workflow.currentStep];
+      const stepChannelId = channelKey ? this.env[channelKey] as string : undefined;
+
+      if (stepChannelId) {
+        await this.postToChannel(stepChannelId, `**${workflow.currentStep}** - Processing...`);
+      }
+
+      // Run the step
+      const result = await runStep(workflow.currentStep, {
+        state: workflow,
+        miniMax: this.miniMax,
+        cache: this.env.CACHE,
+        exaApiKey: this.env.EXA_API_KEY,
+      });
+
+      if (!result.success) {
+        await this.callStub(workflowStub, '/set-error', 'POST', { message: result.error });
+        if (stepChannelId) {
+          await this.postToChannel(stepChannelId, `Error: ${result.error}`);
+        }
+        break;
+      }
+
+      // Save step data
+      const dataKey = getDataKey(workflow.currentStep);
+      if (dataKey && result.data) {
+        await this.callStub(workflowStub, '/set-data', 'POST', { key: dataKey, value: result.data });
+      }
+
+      // Post result to channel
+      if (stepChannelId && result.data) {
+        await this.postToChannel(stepChannelId, `**${workflow.currentStep} Complete**\n\n${truncate(result.data, 1800)}`);
+      }
+
+      // Advance
+      await this.callStub(workflowStub, '/advance', 'POST');
     }
   }
 
-  private async createWorkflowChannels(userId: string, guildId: string, topic: string): Promise<WorkflowChannels> {
-    const categoryName = `📝 ${topic.slice(0, 25)}`.replace(/[^a-zA-Z0-9\s-]/g, '');
+  private async sendApprovalMessage(workflow: WorkflowState): Promise<void> {
+    let content = '## Content Ready for Review!\n\n';
 
-    const categoryResponse = await fetch(`https://discord.com/api/v10/guilds/${guildId}/channels`, {
+    if (workflow.data?.finalBlog) {
+      content += '### Blog Post:\n```\n' + truncate(workflow.data.finalBlog, 1500) + '\n```\n\n';
+    }
+
+    if (workflow.data?.socialPosts) {
+      const posts = typeof workflow.data.socialPosts === 'string'
+        ? JSON.parse(workflow.data.socialPosts)
+        : workflow.data.socialPosts;
+      content += '### Social Posts:\n';
+      content += `**Facebook:** ${truncate(posts.facebook || 'N/A', 200)}\n`;
+      content += `**X/Twitter:** ${truncate(posts.twitter || 'N/A', 200)}\n`;
+      content += `**LinkedIn:** ${truncate(posts.linkedin || 'N/A', 300)}\n`;
+    }
+
+    await fetch(`https://discord.com/api/v10/channels/${this.env.CHANNEL_APPROVAL}/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bot ${this.env.DISCORD_BOT_TOKEN}`,
       },
       body: JSON.stringify({
-        name: categoryName,
-        type: 4,
+        content,
+        components: [
+          {
+            type: 1,
+            components: [
+              { type: 2, style: 3, label: 'Approve & Publish', custom_id: 'approve' },
+              { type: 2, style: 4, label: 'Revise', custom_id: 'revise' },
+            ],
+          },
+        ],
       }),
     });
-
-    if (!categoryResponse.ok) {
-      throw new Error('Failed to create category');
-    }
-
-    const category = await categoryResponse.json() as { id: string };
-    const channels: Record<string, string> = {};
-
-    for (const step of WORKFLOW_STEPS) {
-      const channelResponse = await fetch(`https://discord.com/api/v10/guilds/${guildId}/channels`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bot ${this.env.DISCORD_BOT_TOKEN}`,
-        },
-        body: JSON.stringify({
-          name: step.toLowerCase(),
-          type: 0,
-          parent_id: category.id,
-          topic: `Step ${step} for workflow`,
-        }),
-      });
-
-      if (channelResponse.ok) {
-        const channel = await channelResponse.json() as { id: string };
-        channels[step] = channel.id;
-      }
-    }
-
-    const workflowChannels: WorkflowChannels = { categoryId: category.id, channels };
-    this.userChannels.set(userId, workflowChannels);
-
-    return workflowChannels;
   }
 
-  private async deleteWorkflowChannels(userId: string, guildId: string): Promise<void> {
-    const workflowChannels = this.userChannels.get(userId);
-    if (!workflowChannels) {
-return;
-}
-
-    for (const channelId of Object.values(workflowChannels.channels)) {
-      await fetch(`https://discord.com/api/v10/channels/${channelId}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bot ${this.env.DISCORD_BOT_TOKEN}`,
-        },
-      });
-    }
-
-    await fetch(`https://discord.com/api/v10/channels/${workflowChannels.categoryId}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bot ${this.env.DISCORD_BOT_TOKEN}`,
-      },
-    });
-
-    this.userChannels.delete(userId);
-  }
+  // --- Discord API helpers ---
 
   private async postToChannel(channelId: string, content: string): Promise<void> {
     await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
@@ -229,257 +287,66 @@ return;
     });
   }
 
-  private async runWorkflow(userId: string, guildId: string, topic: string): Promise<void> {
-    const workflowChannels = await this.createWorkflowChannels(userId, guildId, topic);
+  // --- Durable Object helpers ---
 
-    const workflowId = `workflow-${userId}`;
-    const workflowStub = this.env.WORKFLOW.get(this.env.WORKFLOW.idFromName(workflowId));
-
-    await workflowStub.fetch(new Request('http://localhost/init', {
-      method: 'POST',
-      body: JSON.stringify({ topic, userId, channelId: guildId }),
-    }));
-
-    await this.runSteps(workflowStub, userId, workflowChannels);
+  private getStub(userId: string): DurableObjectStub {
+    const id = this.env.WORKFLOW.idFromName(`workflow-${userId}`);
+    return this.env.WORKFLOW.get(id);
   }
 
-  private async runSteps(workflowStub: DurableObjectStub, userId: string, workflowChannels: WorkflowChannels): Promise<void> {
-    while (true) {
-      const statusResponse = await workflowStub.fetch(new Request('http://localhost/status'));
-      const { workflow } = await statusResponse.json() as { workflow: WorkflowState };
-
-      if (!workflow ||
-          workflow.currentStep === 'IDLE' ||
-          workflow.currentStep === 'PUBLISHED' ||
-          workflow.currentStep === 'ERROR') {
-        break;
-      }
-
-      if (workflow.currentStep === 'AWAITING_APPROVAL') {
-        await this.sendApprovalRequest(workflowStub, userId, workflowChannels);
-        break;
-      }
-
-      const stepChannelKey = this.getChannelKeyForStep(workflow.currentStep);
-      const channelId = workflowChannels.channels[stepChannelKey];
-
-      if (channelId) {
-        await this.postToChannel(channelId, `**${workflow.currentStep}**\n\n⏳ Processing...`);
-      }
-
-      const stepResult = await runStep(workflow.currentStep, {
-        state: workflow,
-        miniMax: this.miniMax,
-        cache: this.env.CACHE,
-        exaApiKey: this.env.EXA_API_KEY,
-      });
-
-      if (!stepResult.success) {
-        await workflowStub.fetch(new Request('http://localhost/set-error', {
-          method: 'POST',
-          body: JSON.stringify({ message: stepResult.error }),
-        }));
-        if (channelId) {
-          await this.postToChannel(channelId, `❌ **Error:** ${stepResult.error}`);
-        }
-        await this.deleteWorkflowChannels(userId, workflowChannels.categoryId);
-        break;
-      }
-
-      const dataKey = this.getDataKeyForStep(workflow.currentStep);
-      if (dataKey && stepResult.data) {
-        await workflowStub.fetch(new Request('http://localhost/set-data', {
-          method: 'POST',
-          body: JSON.stringify({ key: dataKey, value: stepResult.data }),
-        }));
-      }
-
-      if (channelId && stepResult.data) {
-        let content = `✅ **${workflow.currentStep} Complete!**\n\n`;
-        content += this.truncate(stepResult.data, 1800);
-        await this.postToChannel(channelId, content);
-      }
-
-      await workflowStub.fetch(new Request('http://localhost/advance', { method: 'POST' }));
-    }
+  private async callStub(stub: DurableObjectStub, path: string, method: string, body?: unknown): Promise<any> {
+    const req = new Request(`http://do${path}`, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const res = await stub.fetch(req);
+    return res.json();
   }
 
-  private async sendApprovalRequest(workflowStub: DurableObjectStub, userId: string, workflowChannels: WorkflowChannels): Promise<void> {
-    const statusResponse = await workflowStub.fetch(new Request('http://localhost/status'));
-    const { workflow } = await statusResponse.json() as { workflow: WorkflowState };
-
-    const approvalChannelId = workflowChannels.channels['APPROVAL'];
-    if (!approvalChannelId) {
-return;
-}
-
-    let content = '## ✅ Content Ready for Review!\n\n';
-
-    if (workflow?.data?.finalBlog) {
-      content += '### 📝 **Final Blog Post:**\n';
-      content += '```\n' + this.truncate(workflow.data.finalBlog, 1500) + '\n```\n\n';
-    }
-
-    if (workflow?.data?.socialPosts) {
-      const posts = typeof workflow.data.socialPosts === 'string'
-        ? JSON.parse(workflow.data.socialPosts)
-        : workflow.data.socialPosts;
-      content += '### 📱 **Social Posts:**\n\n';
-      content += `**Facebook:** ${this.truncate(posts.facebook || 'N/A', 200)}\n\n`;
-      content += `**X/Twitter:** ${this.truncate(posts.twitter || 'N/A', 200)}\n\n`;
-      content += `**LinkedIn:** ${this.truncate(posts.linkedin || 'N/A', 300)}\n`;
-    }
-
-    content += '\n---\n**React ✅ to publish or ❌ to request revisions.**';
-
-    await this.postToChannel(approvalChannelId, content);
-
-    // Store approval channel for reaction handling
-    this.approvalMessages.set(userId, approvalChannelId);
+  private async getWorkflow(userId: string): Promise<WorkflowState | null> {
+    const { workflow } = await this.callDO(userId, '/status', 'GET');
+    return workflow;
   }
 
-  async handleReaction(userId: string, channelId: string, emoji: string): Promise<void> {
-    const storedChannelId = this.approvalMessages.get(userId);
-
-    // Check if reaction is in approval channel for this user
-    if (channelId !== storedChannelId) {
-return;
-}
-
-    const workflowId = `workflow-${userId}`;
-    const workflowStub = this.env.WORKFLOW.get(this.env.WORKFLOW.idFromName(workflowId));
-
-    const statusResponse = await workflowStub.fetch(new Request('http://localhost/status'));
-    const { workflow } = await statusResponse.json() as { workflow: WorkflowState };
-
-    if (!workflow || workflow.currentStep !== 'AWAITING_APPROVAL') {
-return;
-}
-
-    if (emoji === '✅') {
-      // Publish
-      await this.publishWorkflow(workflowStub, userId, workflow);
-    } else if (emoji === '❌') {
-      // Request revision - go back to EDIT
-      await workflowStub.fetch(new Request('http://localhost/set-step', {
-        method: 'POST',
-        body: JSON.stringify({ step: 'EDIT' }),
-      }));
-      await this.postToChannel(channelId, 'Got it! Going back to **EDIT** step...');
-
-      // Resume workflow from EDIT
-      await this.runSteps(workflowStub, userId, this.userChannels.get(userId)!);
-    }
+  private async callDO(userId: string, path: string, method: string, body?: unknown): Promise<any> {
+    return this.callStub(this.getStub(userId), path, method, body);
   }
 
-  private async publishWorkflow(workflowStub: DurableObjectStub, userId: string, workflow: WorkflowState): Promise<void> {
-    const approvalChannelId = this.approvalMessages.get(userId);
-
-    if (!workflow.data?.finalBlog) {
-      if (approvalChannelId) {
-        await this.postToChannel(approvalChannelId, '❌ No blog content to publish.');
-      }
-      return;
-    }
-
-    if (approvalChannelId) {
-      await this.postToChannel(approvalChannelId, '⏳ Publishing to GitHub Pages...');
-    }
-
-    try {
-      const slug = this.github.generateSlug(workflow.topic);
-      const path = `_posts/${this.formatDate()}-${slug}.md`;
-      const markdown = generateBlogMarkdown(
-        workflow.topic,
-        workflow.data.finalBlog,
-        typeof workflow.data.socialPosts === 'string'
-          ? JSON.parse(workflow.data.socialPosts)
-          : workflow.data.socialPosts,
-      );
-
-      const success = await this.github.createFile(path, markdown, `Publish blog post: ${workflow.topic}`);
-
-      if (success) {
-        await workflowStub.fetch(new Request('http://localhost/approve', { method: 'POST' }));
-
-        if (approvalChannelId) {
-          await this.postToChannel(approvalChannelId, `🎉 **Successfully published to GitHub Pages!**\n\nPath: \`${path}\``);
-        }
-
-        // Clean up channels after publishing
-        const workflowChannels = this.userChannels.get(userId);
-        if (workflowChannels) {
-          setTimeout(() => this.deleteWorkflowChannels(userId, ''), 5000);
-        }
-      } else {
-        if (approvalChannelId) {
-          await this.postToChannel(approvalChannelId, '❌ Failed to publish. Check GitHub token permissions.');
-        }
-      }
-    } catch (error) {
-      if (approvalChannelId) {
-        await this.postToChannel(approvalChannelId, `❌ Publishing error: ${error}`);
-      }
-    }
-  }
-
-  private getChannelKeyForStep(step: string): string {
-    switch (step) {
-      case 'RESEARCH': return 'RESEARCH';
-      case 'DRAFT': return 'DRAFT';
-      case 'EDIT': return 'EDIT';
-      case 'FINAL': return 'FINAL';
-      case 'SOCIAL': return 'SOCIAL';
-      default: return 'APPROVAL';
-    }
-  }
-
-  private getDataKeyForStep(step: string): string | null {
-    switch (step) {
-      case 'RESEARCH': return 'research';
-      case 'DRAFT': return 'draft';
-      case 'EDIT': return 'edited';
-      case 'FINAL': return 'finalBlog';
-      case 'SOCIAL': return 'socialPosts';
-      default: return null;
-    }
-  }
-
-  private truncate(text: string, maxLength: number): string {
-    if (text.length <= maxLength) {
-return text;
-}
-    return text.slice(0, maxLength - 50) + '...\n\n_(truncated)_';
-  }
+  // --- Formatting ---
 
   private formatStatus(workflow: WorkflowState): string {
-    let status = '**Workflow Status**\n';
-    status += `Topic: ${workflow.topic}\n`;
-    status += `Step: ${workflow.currentStep}\n\n`;
-
-    if (workflow.data.errorMessage) {
-      status += `Error: ${workflow.data.errorMessage}\n\n`;
+    let status = `**Workflow Status**\nTopic: ${workflow.topic}\nStep: ${workflow.currentStep}\n`;
+    if (workflow.data?.errorMessage) {
+      status += `Error: ${workflow.data.errorMessage}\n`;
     }
-
-    if (workflow.data.finalBlog) {
-      status += '**Preview:**\n```\n';
-      status += this.truncate(workflow.data.finalBlog, 400);
-      status += '```';
+    if (workflow.data?.finalBlog) {
+      status += `\n**Preview:**\n\`\`\`\n${truncate(workflow.data.finalBlog, 400)}\n\`\`\``;
     }
-
     return status;
   }
 
-  private formatDate(): string {
-    return new Date().toISOString().split('T')[0];
+  private ephemeral(content: string): { type: number; data: Record<string, unknown> } {
+    return { type: 4, data: { content, flags: 64 } };
   }
+}
 
-  private ephemeralResponse(content: string): DiscordResponse {
-    return {
-      type: 4,
-      data: {
-        content,
-      },
-    };
+function getDataKey(step: string): string | null {
+  switch (step) {
+    case 'RESEARCH': return 'research';
+    case 'DRAFT': return 'draft';
+    case 'EDIT': return 'edited';
+    case 'FINAL': return 'finalBlog';
+    case 'SOCIAL': return 'socialPosts';
+    default: return null;
   }
+}
+
+function truncate(text: string, max: number): string {
+  if (text.length <= max) return text;
+  return text.slice(0, max - 50) + '...\n\n_(truncated)_';
+}
+
+function formatDate(): string {
+  return new Date().toISOString().split('T')[0];
 }

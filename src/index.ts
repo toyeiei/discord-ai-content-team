@@ -1,7 +1,26 @@
+import nacl from 'tweetnacl';
 import { WorkflowStateDO } from './env';
 import type { Env } from './env';
 import { DiscordSlashHandler } from './discord-slash';
 import type { DiscordInteraction } from './discord-slash';
+
+function hexToUint8Array(hex: string): Uint8Array {
+  return new Uint8Array(hex.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16)));
+}
+
+function verifyDiscordSignature(
+  publicKey: string,
+  signature: string,
+  timestamp: string,
+  body: string,
+): boolean {
+  const message = new TextEncoder().encode(timestamp + body);
+  return nacl.sign.detached.verify(
+    message,
+    hexToUint8Array(signature),
+    hexToUint8Array(publicKey),
+  );
+}
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -11,104 +30,48 @@ export default {
       return Response.json({ status: 'ok', timestamp: Date.now() });
     }
 
-    // Discord Slash Command endpoint
+    // Discord Interactions endpoint (slash commands + buttons)
     if (url.pathname === '/discord' && request.method === 'POST') {
       try {
-        const body = await request.json() as DiscordInteraction;
-        const handler = new DiscordSlashHandler(env);
-        const response = await handler.handleInteraction(body);
-        return Response.json(response);
+        const rawBody = await request.text();
+        const signature = request.headers.get('X-Signature-Ed25519') || '';
+        const timestamp = request.headers.get('X-Signature-Timestamp') || '';
+
+        if (!signature || !timestamp) {
+          return new Response('Missing signature headers', { status: 401 });
+        }
+
+        const valid = verifyDiscordSignature(env.DISCORD_PUBLIC_KEY, signature, timestamp, rawBody);
+        if (!valid) {
+          return new Response('Invalid request signature', { status: 401 });
+        }
+
+        const body = JSON.parse(rawBody) as DiscordInteraction;
+
+        // PING
+        if (body.type === 1) {
+          return Response.json({ type: 1 });
+        }
+
+        // APPLICATION_COMMAND (slash commands)
+        if (body.type === 2) {
+          const handler = new DiscordSlashHandler(env);
+          const response = await handler.handleInteraction(body, ctx);
+          return Response.json(response);
+        }
+
+        // MESSAGE_COMPONENT (button clicks)
+        if (body.type === 3) {
+          const handler = new DiscordSlashHandler(env);
+          const response = await handler.handleButton(body);
+          return Response.json(response);
+        }
+
+        return Response.json({ error: 'Unsupported interaction type' }, { status: 400 });
       } catch (error) {
         console.error('Discord interaction error:', error);
         return Response.json({ error: 'Internal error' }, { status: 500 });
       }
-    }
-
-    // Reaction handler endpoint (called by Discord message reaction events)
-    if (url.pathname === '/reaction' && request.method === 'POST') {
-      try {
-        const body = await request.json() as { userId: string; channelId: string; emoji: string };
-        const handler = new DiscordSlashHandler(env);
-        await handler.handleReaction(body.userId, body.channelId, body.emoji);
-        return Response.json({ ok: true });
-      } catch (error) {
-        console.error('Reaction handler error:', error);
-        return Response.json({ error: 'Internal error' }, { status: 500 });
-      }
-    }
-
-    if (url.pathname === '/workflow' && request.method === 'POST') {
-      const body = await request.json() as { 
-        action: string; 
-        userId: string; 
-        channelId?: string; 
-        topic?: string;
-        stepData?: Record<string, string>;
-        step?: string;
-        message?: string;
-      };
-      
-      const workflowId = `workflow-${body.userId}`;
-      const workflowStub = env.WORKFLOW.get(env.WORKFLOW.idFromName(workflowId));
-      
-      let endpoint = '/status';
-      let method = 'GET';
-      let reqBody: string | null = null;
-
-      switch (body.action) {
-        case 'create':
-          endpoint = '/init';
-          method = 'POST';
-          reqBody = JSON.stringify({ 
-            topic: body.topic, 
-            userId: body.userId, 
-            channelId: body.channelId, 
-          });
-          break;
-        case 'status':
-          endpoint = '/status';
-          break;
-        case 'advance':
-          endpoint = '/advance';
-          method = 'POST';
-          break;
-        case 'set-data':
-          endpoint = '/set-data';
-          method = 'POST';
-          reqBody = JSON.stringify(body.stepData);
-          break;
-        case 'set-step':
-          endpoint = '/set-step';
-          method = 'POST';
-          reqBody = JSON.stringify({ step: body.step });
-          break;
-        case 'set-error':
-          endpoint = '/set-error';
-          method = 'POST';
-          reqBody = JSON.stringify({ message: body.message });
-          break;
-        case 'approve':
-          endpoint = '/approve';
-          method = 'POST';
-          break;
-        case 'retry':
-          endpoint = '/retry';
-          method = 'POST';
-          break;
-        case 'cancel':
-          endpoint = '/cancel';
-          method = 'POST';
-          break;
-      }
-
-      const response = await workflowStub.fetch(new Request(`http://localhost${endpoint}`, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: reqBody || undefined,
-      }));
-
-      const data = await response.json();
-      return Response.json(data, { status: response.status });
     }
 
     return Response.json({ error: 'Not found' }, { status: 404 });

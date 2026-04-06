@@ -19,8 +19,6 @@ export default defineConfig({
         '*.config.*',
         '**/*.d.ts',
         'src/env.ts', // Durable Objects require integration testing
-        'src/discord.ts', // Discord.js requires integration testing
-        'src/bot.ts', // Discord.js requires integration testing
         'src/exa.ts', // External API requires integration testing
         'src/index.ts', // Worker runtime requires integration testing
       ],
