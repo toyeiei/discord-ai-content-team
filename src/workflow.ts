@@ -1,6 +1,5 @@
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:workers';
 import { MiniMaxClient } from './minimax';
-import { searchWeb, summarizeSearchResults } from './exa';
 import { postToChannel } from './discord';
 import type { Env, WorkflowChannels } from './env';
 
@@ -23,22 +22,6 @@ const RESEARCH_PROMPT = `Research the following topic thoroughly. Find key facts
 Topic: {topic}
 
 **CRITICAL: Keep the summary to 150-200 words max. Be concise and focused.**`;
-
-const RESEARCH_WITH_EXA_PROMPT = `You are a research analyst. Based on the following web search results, create a concise research summary for a blog post.
-
-Search Results:
-{summary}
-
-Topic: {topic}
-
-**CRITICAL: Keep the summary to 150-200 words max. Be concise and focused.**
-
-Provide:
-- Key findings (bullet list)
-- Top 3-5 points to cover in the blog
-- Any important statistics or facts
-
-Use bullet points and keep it brief.`;
 
 const DRAFT_PROMPT = `You are a professional content writer. Write a blog post draft based on the following research.
 
@@ -124,31 +107,14 @@ export class ContentWorkflow extends WorkflowEntrypoint<Env, WorkflowParams> {
     const botToken = this.env.DISCORD_BOT_TOKEN;
 
     // RESEARCH
-    await postToChannel(channels.research, '🔍 **Research Phase** - Searching the web...', botToken);
+    await postToChannel(channels.research, '🔍 **Research Phase** - Searching...', botToken);
     
-    let research: string;
-    if (this.env.EXA_API_KEY) {
-      const results = await step.do('research-web', async () => {
-        return await searchWeb(`${topic} latest news, trends, insights, statistics`, this.env.EXA_API_KEY);
-      });
-      await postToChannel(channels.research, `🔍 **Research Phase** - Found ${results.length} results. Generating summary...`, botToken);
-      
-      const summary = await summarizeSearchResults(results);
-      research = await step.do('research-summary', async () => {
-        return await miniMax.chat([{
-          role: 'user',
-          content: RESEARCH_WITH_EXA_PROMPT.replace('{summary}', summary).replace('{topic}', topic),
-        }], { maxTokens: 1600 });
-      });
-    } else {
-      research = await step.do('research-direct', async () => {
-        await postToChannel(channels.research, '🔍 **Research Phase** - No EXA_API_KEY, using MiniMax directly...', botToken);
-        return await miniMax.chat([{
-          role: 'user',
-          content: RESEARCH_PROMPT.replace('{topic}', topic),
-        }], { maxTokens: 1600 });
-      });
-    }
+    const research = await step.do('research', async () => {
+      return await miniMax.chat([{
+        role: 'user',
+        content: RESEARCH_PROMPT.replace('{topic}', topic),
+      }], { maxTokens: 1600 });
+    });
     
     if (this.env.CACHE) {
       const key = `research:${topic.toLowerCase().replace(/\s+/g, '-')}`;
