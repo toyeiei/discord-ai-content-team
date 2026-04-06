@@ -56,22 +56,16 @@ Write a blog post with:
 
 Aim for 200 words.`;
 
-const EDIT_PROMPT = `You are a senior editor. Review the draft below and provide 3-5 clear, actionable revision tips.
-
-**CRITICAL: Keep your tips under 1200 characters total. Be concise.**
-
-Draft:
-{draft}
-
-Provide 3-5 specific, actionable tips to improve clarity, engagement, and impact. Use bullet points.`;
-
 const FINAL_PROMPT = `You are a professional content editor. Polish the following blog post into a final, publication-ready version.
 
 Topic: {topic}
-Edited draft:
-{edited}
+Original draft:
+{draft}
 
-**CRITICAL: Keep the blog post under 1600 characters and 300 words max. Be concise and focused.**
+Revision tips:
+{tips}
+
+**CRITICAL: Keep the blog post under 1600 characters and 300 words max. Apply the revision tips to improve the draft.**
 
 Return only the final polished blog post.`;
 
@@ -163,7 +157,7 @@ export class ContentWorkflow extends WorkflowEntrypoint<Env, WorkflowParams> {
     // FINAL
     const finalBlog = await step.do('final', async () => {
       await postToChannel(channels.final, '✨ **Final Phase** - Polishing...', botToken);
-      return await miniMax.chat([{ role: 'user', content: FINAL_PROMPT.replace('{topic}', topic).replace('{edited}', edited) }], { maxTokens: 1600 });
+      return await miniMax.chat([{ role: 'user', content: FINAL_PROMPT.replace('{topic}', topic).replace('{draft}', draft).replace('{tips}', edited) }], { maxTokens: 1600 });
     });
     await postToChannel(channels.final, `✅ **Final Phase Complete**\n\n${finalBlog}`, botToken);
 
