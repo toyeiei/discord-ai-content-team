@@ -27,9 +27,9 @@ export function parseSocialPosts(
   // Remove markdown bold markers for cleaner parsing
   const clean = content.replace(/\*\*/g, '');
   
-  // Match content between platform headers
-  const fb = clean.match(/facebook[:\s]*\n?([\s\S]*?)(?=\n\s*(?:x|twitter|linkedin)|$)/i);
-  const tw = clean.match(/(?:x|twitter)[:\s]*\n?([\s\S]*?)(?=\n\s*linkedin|$)/i);
+  // Match content between platform headers - fixed Twitter regex to handle "X/Twitter"
+  const fb = clean.match(/facebook[:\s]*\n?([\s\S]*?)(?=\n\s*(?:x\/twitter|twitter|linkedin)|$)/i);
+  const tw = clean.match(/(?:x\/twitter|twitter)[:\s]*\n?([\s\S]*?)(?=\n\s*linkedin|$)/i);
   const li = clean.match(/linkedin[:\s]*\n?([\s\S]*?)$/i);
   
   if (fb) r.facebook = fb[1].trim();
