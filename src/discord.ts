@@ -27,11 +27,38 @@ export async function postToThread(threadId: string, content: string, botToken: 
 }
 
 export async function postToChannel(channelId: string, content: string, botToken: string): Promise<void> {
-  await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bot ${botToken}` },
-    body: JSON.stringify({ content }),
-  });
+  const MAX_LENGTH = 1900;
+  
+  if (content.length <= MAX_LENGTH) {
+    await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bot ${botToken}` },
+      body: JSON.stringify({ content }),
+    });
+    return;
+  }
+
+  // Split into chunks
+  const chunks: string[] = [];
+  let remaining = content;
+  
+  while (remaining.length > MAX_LENGTH) {
+    chunks.push(remaining.slice(0, MAX_LENGTH));
+    remaining = remaining.slice(MAX_LENGTH);
+  }
+  chunks.push(remaining);
+
+  // Post each chunk
+  for (let i = 0; i < chunks.length; i++) {
+    const header = chunks.length > 1 ? `📄 [${i + 1}/${chunks.length}]\n` : '';
+    await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bot ${botToken}` },
+      body: JSON.stringify({ content: header + chunks[i] }),
+    });
+    // Small delay to avoid rate limits
+    await new Promise((r) => setTimeout(r, 100));
+  }
 }
 
 export async function sendApprovalMessage(

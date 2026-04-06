@@ -2,7 +2,7 @@ import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:work
 import { MiniMaxClient } from './minimax';
 import { GitHubClient, generateBlogMarkdown } from './github';
 import { searchWeb, summarizeSearchResults } from './exa';
-import { postToChannel, sendApprovalMessage, truncate } from './discord';
+import { postToChannel, sendApprovalMessage } from './discord';
 import type { Env, WorkflowChannels } from './env';
 
 // ---------------------------------------------------------------------------
@@ -215,24 +215,24 @@ export class ContentWorkflow extends WorkflowEntrypoint<Env, WorkflowParams> {
 
       return data;
     });
-    await postToChannel(channels.research, `✅ **Research Phase Complete**\n\n${truncate(research, 1900)}`, botToken);
+    await postToChannel(channels.research, `✅ **Research Phase Complete**\n\n${research}`, botToken);
 
     // DRAFT
     const draft = await runAiStep(miniMax, 'draft', '✍️ **Draft Phase** - Writing...', DRAFT_PROMPT.replace('{topic}', topic).replace('{research}', research), channels.draft, botToken);
-    await postToChannel(channels.draft, `✅ **Draft Phase Complete**\n\n${truncate(draft, 1900)}`, botToken);
+    await postToChannel(channels.draft, `✅ **Draft Phase Complete**\n\n${draft}`, botToken);
 
     // EDIT
     const edited = await runAiStep(miniMax, 'edit', '🔍 **Edit Phase** - Reviewing...', EDIT_PROMPT.replace('{draft}', draft), channels.edit, botToken);
-    await postToChannel(channels.edit, `✅ **Edit Phase Complete**\n\n${truncate(edited, 1900)}`, botToken);
+    await postToChannel(channels.edit, `✅ **Edit Phase Complete**\n\n${edited}`, botToken);
 
     // FINAL
     const finalBlog = await runAiStep(miniMax, 'final', '✨ **Final Phase** - Polishing...', FINAL_PROMPT.replace('{topic}', topic).replace('{edited}', edited), channels.final, botToken);
-    await postToChannel(channels.final, `✅ **Final Phase Complete**\n\n${truncate(finalBlog, 1900)}`, botToken);
+    await postToChannel(channels.final, `✅ **Final Phase Complete**\n\n${finalBlog}`, botToken);
 
     // SOCIAL
     const socialContent = await runAiStep(miniMax, 'social', '📱 **Social Phase** - Creating posts...', SOCIAL_PROMPT.replace('{blog}', finalBlog), channels.social, botToken);
     const socialPosts = JSON.stringify(parseSocialPosts(socialContent));
-    await postToChannel(channels.social, `✅ **Social Phase Complete**\n\n${truncate(socialPosts, 1900)}`, botToken);
+    await postToChannel(channels.social, `✅ **Social Phase Complete**\n\n${socialPosts}`, botToken);
 
     // APPROVAL - in final channel
     await sendApprovalMessage(channels.final, finalBlog, socialPosts, botToken);
