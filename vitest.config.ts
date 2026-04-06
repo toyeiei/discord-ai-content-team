@@ -18,9 +18,12 @@ export default defineConfig({
         'dist/',
         '*.config.*',
         '**/*.d.ts',
-        'src/env.ts', // Durable Objects require integration testing
-        'src/exa.ts', // External API requires integration testing
-        'src/index.ts', // Worker runtime requires integration testing
+        'src/env.ts', // Only type declarations
+        'src/index.ts', // Worker runtime
+        'src/workflow.ts', // Cloudflare Workflows runtime
+        'src/github.ts', // Calls GitHub API
+        'src/minimax.ts', // Calls MiniMax API
+        'src/exa.ts', // Calls Exa API
       ],
       thresholds: {
         lines: 80,

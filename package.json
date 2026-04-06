@@ -17,8 +17,6 @@
   },
   "dependencies": {
     "@cloudflare/workers-types": "^4.20241106.0",
-    "dotenv": "^17.4.1",
-    "itty-router": "^4.2.0",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {

@@ -23,7 +23,7 @@ describe('MiniMaxClient', () => {
     it('should throw error on API error', async () => {
       const client = new MiniMaxClient('test-api-key');
 
-      global.fetch = vi.fn().mockResolvedValueOnce({
+      globalThis.fetch = vi.fn().mockResolvedValueOnce({
         ok: false,
         status: 401,
         text: () => Promise.resolve('Unauthorized'),
@@ -37,7 +37,7 @@ describe('MiniMaxClient', () => {
     it('should throw error when no choices returned', async () => {
       const client = new MiniMaxClient('test-api-key');
 
-      global.fetch = vi.fn().mockResolvedValueOnce({
+      globalThis.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: () =>
           Promise.resolve({
@@ -54,7 +54,7 @@ describe('MiniMaxClient', () => {
     it('should return content from successful response', async () => {
       const client = new MiniMaxClient('test-api-key');
 
-      global.fetch = vi.fn().mockResolvedValueOnce({
+      globalThis.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: () =>
           Promise.resolve({
@@ -84,7 +84,7 @@ describe('MiniMaxClient', () => {
     it('should use provided temperature', async () => {
       const client = new MiniMaxClient('test-api-key');
 
-      global.fetch = vi.fn().mockResolvedValueOnce({
+      globalThis.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: () =>
           Promise.resolve({
@@ -100,7 +100,7 @@ describe('MiniMaxClient', () => {
 
       await client.chat([{ role: 'user', content: 'Hello' }], { temperature: 0.9 });
 
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         'https://api.minimax.chat/v1/text/chatcompletion_v2',
         expect.objectContaining({
           method: 'POST',
@@ -113,7 +113,7 @@ describe('MiniMaxClient', () => {
     it('should use provided maxTokens', async () => {
       const client = new MiniMaxClient('test-api-key');
 
-      global.fetch = vi.fn().mockResolvedValueOnce({
+      globalThis.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: () =>
           Promise.resolve({
@@ -129,7 +129,7 @@ describe('MiniMaxClient', () => {
 
       await client.chat([{ role: 'user', content: 'Hello' }], { maxTokens: 1024 });
 
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         'https://api.minimax.chat/v1/text/chatcompletion_v2',
         expect.objectContaining({
           body: expect.stringContaining('"max_tokens":1024'),
@@ -142,7 +142,7 @@ describe('MiniMaxClient', () => {
     it('should succeed on first attempt', async () => {
       const client = new MiniMaxClient('test-api-key');
 
-      global.fetch = vi.fn().mockResolvedValueOnce({
+      globalThis.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: () =>
           Promise.resolve({
@@ -159,13 +159,13 @@ describe('MiniMaxClient', () => {
       const result = await client.chatWithRetry([{ role: 'user', content: 'Hello' }]);
 
       expect(result).toBe('Success');
-      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     });
 
     it('should retry on failure and succeed', async () => {
       const client = new MiniMaxClient('test-api-key');
 
-      global.fetch = vi.fn()
+      globalThis.fetch = vi.fn()
         .mockResolvedValueOnce({
           ok: false,
           status: 500,
@@ -188,13 +188,13 @@ describe('MiniMaxClient', () => {
       const result = await client.chatWithRetry([{ role: 'user', content: 'Hello' }], { retries: 3 });
 
       expect(result).toBe('Success on retry');
-      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(globalThis.fetch).toHaveBeenCalledTimes(2);
     });
 
     it('should throw after all retries exhausted', async () => {
       const client = new MiniMaxClient('test-api-key');
 
-      global.fetch = vi.fn().mockResolvedValue({
+      globalThis.fetch = vi.fn().mockResolvedValue({
         ok: false,
         status: 500,
         text: () => Promise.resolve('Server Error'),
@@ -204,7 +204,7 @@ describe('MiniMaxClient', () => {
         client.chatWithRetry([{ role: 'user', content: 'Hello' }], { retries: 3 }),
       ).rejects.toThrow('Server Error');
 
-      expect(global.fetch).toHaveBeenCalledTimes(3);
+      expect(globalThis.fetch).toHaveBeenCalledTimes(3);
     });
   });
 });

@@ -16,48 +16,13 @@ describe('DiscordSlashHandler', () => {
       DISCORD_PUBLIC_KEY: 'discord-public-key',
       GITHUB_TOKEN: 'github-token',
       GITHUB_REPO: 'owner/repo',
-      CHANNEL_RESEARCH: 'ch-research',
-      CHANNEL_DRAFT: 'ch-draft',
-      CHANNEL_EDIT: 'ch-edit',
-      CHANNEL_FINAL: 'ch-final',
-      CHANNEL_SOCIAL: 'ch-social',
-      CHANNEL_APPROVAL: 'ch-approval',
-      WORKFLOW: {
+      DISCORD_CHANNEL_ID: 'ch-create',
+      CONTENT_WORKFLOW: {
+        create: vi.fn(),
         get: vi.fn(),
-        idFromName: vi.fn(),
       },
       CACHE: null,
     }) as unknown as Env;
-
-  it('schedules create workflow with waitUntil and returns an immediate response', async () => {
-    const env = makeEnv();
-    const handler = new DiscordSlashHandler(env);
-    const runWorkflowSpy = vi
-      .spyOn(handler as any, 'runWorkflow')
-      .mockImplementation(async () => undefined);
-    const waitUntil = vi.fn();
-
-    const response = await handler.handleInteraction(
-      {
-        type: 2,
-        token: 'interaction-token',
-        guild_id: 'guild-123',
-        member: { user: { id: 'user-123', username: 'neo' } },
-        data: {
-          name: 'create',
-          options: [{ name: 'topic', value: 'macbook neo 2026 reviews' }],
-        },
-      } satisfies DiscordInteraction,
-      { waitUntil, passThroughOnException: vi.fn(), props: {} } as unknown as ExecutionContext,
-    );
-
-    expect(response).toEqual({
-      type: 4,
-      data: { content: 'Starting workflow for: **macbook neo 2026 reviews**' },
-    });
-    expect(runWorkflowSpy).toHaveBeenCalledWith('user-123', 'macbook neo 2026 reviews');
-    expect(waitUntil).toHaveBeenCalledTimes(1);
-  });
 
   it('returns ephemeral for unknown commands', async () => {
     const env = makeEnv();
@@ -101,5 +66,75 @@ describe('DiscordSlashHandler', () => {
 
     expect(response.type).toBe(4);
     expect((response.data as any).content).toContain('Usage');
+  });
+
+  it('handleCreate creates thread and starts workflow', async () => {
+    const env = makeEnv();
+    const handler = new DiscordSlashHandler(env);
+
+    // Mock Discord API: thread creation
+    const threadResponse = { channel_id: 'thread-123', id: 'thread-123' };
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify(threadResponse), { status: 200 }),
+    );
+    // Mock: post instance ID message
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response('{}', { status: 200 }),
+    );
+
+    const mockInstance = { id: 'workflow-123', create: vi.fn() };
+    env.CONTENT_WORKFLOW.create = vi.fn().mockResolvedValue(mockInstance);
+
+    const response = await handler.handleInteraction({
+      type: 2,
+      token: 'interaction-token',
+      guild_id: 'guild-123',
+      member: { user: { id: 'user-123', username: 'neo' } },
+      data: {
+        name: 'create',
+        options: [{ name: 'topic', value: 'AI in 2026' }],
+      },
+    } satisfies DiscordInteraction);
+
+    expect(response.type).toBe(4);
+    expect((response.data as any).content).toContain('Workflow started');
+    expect(env.CONTENT_WORKFLOW.create).toHaveBeenCalledWith({
+      id: expect.stringContaining('workflow-user-123'),
+      params: {
+        topic: 'AI in 2026',
+        userId: 'user-123',
+        threadId: 'thread-123',
+      },
+    });
+  });
+
+  it('handleStatus returns help message', async () => {
+    const env = makeEnv();
+    const handler = new DiscordSlashHandler(env);
+
+    const response = await handler.handleInteraction({
+      type: 2,
+      token: 'token',
+      data: { name: 'status' },
+      member: { user: { id: 'user-123', username: 'neo' } },
+    } satisfies DiscordInteraction);
+
+    expect(response.type).toBe(4);
+    expect((response.data as any).content).toContain('Check the thread');
+  });
+
+  it('handleCancel returns help message', async () => {
+    const env = makeEnv();
+    const handler = new DiscordSlashHandler(env);
+
+    const response = await handler.handleInteraction({
+      type: 2,
+      token: 'token',
+      data: { name: 'cancel' },
+      member: { user: { id: 'user-123', username: 'neo' } },
+    } satisfies DiscordInteraction);
+
+    expect(response.type).toBe(4);
+    expect((response.data as any).content).toContain('cancel');
   });
 });
