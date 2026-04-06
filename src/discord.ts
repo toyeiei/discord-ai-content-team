@@ -62,16 +62,38 @@ export async function createThread(
   topic: string,
   botToken: string,
 ): Promise<string | null> {
-  const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+  // Step 1: Create a message to use as the thread starter
+  const msgRes = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bot ${botToken}` },
-    body: JSON.stringify({ content: `Starting workflow for: **${topic}**`, thread_name: topic.slice(0, 90) }),
+    body: JSON.stringify({ content: `Starting workflow for: **${topic}**` }),
   });
 
-  if (!res.ok) return null;
+  if (!msgRes.ok) {
+    console.error('Failed to create message:', await msgRes.text());
+    return null;
+  }
 
-  const data = await res.json() as { channel_id?: string; id: string };
-  return data.channel_id || data.id;
+  const msgData = await msgRes.json() as { id: string };
+  const messageId = msgData.id;
+
+  // Step 2: Create a thread from that message
+  const threadRes = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages/${messageId}/threads`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bot ${botToken}` },
+    body: JSON.stringify({
+      name: topic.slice(0, 90),
+      auto_archive_duration: 1440, // 24 hours
+    }),
+  });
+
+  if (!threadRes.ok) {
+    console.error('Failed to create thread:', await threadRes.text());
+    return null;
+  }
+
+  const threadData = await threadRes.json() as { id: string };
+  return threadData.id;
 }
 
 export async function postInstanceId(threadId: string, instanceId: string, botToken: string): Promise<void> {

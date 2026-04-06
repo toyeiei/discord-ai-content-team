@@ -11,6 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:discord": "tsx scripts/test-discord-bot.ts",
+    "deploy:test": "wrangler deploy && tsx scripts/test-discord-bot.ts",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "typecheck": "tsc --noEmit"
