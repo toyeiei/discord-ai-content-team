@@ -47,8 +47,8 @@ export class DiscordSlashHandler {
     const instanceId = `workflow-${userId}-${Date.now()}`;
     await this.env.CONTENT_WORKFLOW.create({ id: instanceId, params: { topic, userId, channels } });
 
-    // Post workflow start to all channels
-    const startMsg = `🚀 **Workflow started:** ${topic}\nWorkflow ID: \`${instanceId}\``;
+    // Post workflow start to research channel
+    const startMsg = `🚀 **New Workflow Started**\n📝 **Topic:** ${topic}\n🔖 **ID:** \`${instanceId}\``;
     await postToChannel(this.env.RESEARCH_CHANNEL_ID, startMsg, this.env.DISCORD_BOT_TOKEN);
 
     // Post instance ID to research channel for tracking
