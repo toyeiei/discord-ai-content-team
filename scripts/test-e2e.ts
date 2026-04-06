@@ -197,7 +197,7 @@ async function runE2ETest(): Promise<void> {
     const facebook = await miniMax.chat([{
       role: 'user',
       content: FACEBOOK_PROMPT.replace('{blog}', finalBlog),
-    }], { maxTokens: 320 });
+    }], { maxTokens: 500 });
     
     assertNotEmpty(facebook, 'Facebook');
     socialResults.push({ step: 'Facebook', passed: true, duration: Date.now() - fbStart, output: facebook });
@@ -214,7 +214,7 @@ async function runE2ETest(): Promise<void> {
     const twitter = await miniMax.chat([{
       role: 'user',
       content: TWITTER_PROMPT.replace('{blog}', finalBlog),
-    }], { maxTokens: 280 });
+    }], { maxTokens: 400 });
     
     assertNotEmpty(twitter, 'X/Twitter');
     socialResults.push({ step: 'X/Twitter', passed: true, duration: Date.now() - twStart, output: twitter });
@@ -231,7 +231,7 @@ async function runE2ETest(): Promise<void> {
     const linkedin = await miniMax.chat([{
       role: 'user',
       content: LINKEDIN_PROMPT.replace('{blog}', finalBlog),
-    }], { maxTokens: 900 });
+    }], { maxTokens: 1000 });
     
     assertNotEmpty(linkedin, 'LinkedIn');
     socialResults.push({ step: 'LinkedIn', passed: true, duration: Date.now() - liStart, output: linkedin });
