@@ -1,5 +1,10 @@
 export interface Env {
-  CONTENT_WORKFLOW: Workflow;
+  CONTENT_WORKFLOW: {
+    create(options: { id: string; params: unknown }): Promise<void>;
+    get(id: string): {
+      sendEvent(event: unknown): Promise<void>;
+    };
+  };
   CACHE: KVNamespace;
   MINIMAX_API_KEY: string;
   DISCORD_BOT_TOKEN: string;

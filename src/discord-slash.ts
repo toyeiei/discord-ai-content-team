@@ -1,6 +1,7 @@
 import { postToChannel, postInstanceId, findInstanceIdInThread } from './discord';
 import type { Env, WorkflowChannels } from './env';
 import type { DiscordInteraction } from './discord';
+import { sanitizeTopic } from './config';
 
 export { type DiscordInteraction };
 
@@ -30,7 +31,8 @@ export class DiscordSlashHandler {
 
   private async handleCreate(body: DiscordInteraction): Promise<{ type: number; data?: Record<string, unknown> }> {
     const userId = body.member?.user.id || 'unknown';
-    const topic = body.data?.options?.find((o: { name: string; value: string }) => o.name === 'topic')?.value || '';
+    const rawTopic = body.data?.options?.find((o: { name: string; value: string }) => o.name === 'topic')?.value || '';
+    const topic = sanitizeTopic(rawTopic);
 
     if (!topic) {
       return this.ephemeral('Usage: `/create topic: <your blog topic>`');
