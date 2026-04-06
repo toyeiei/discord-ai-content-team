@@ -65,17 +65,32 @@ Revision tips:
 
 Return only the final polished blog post.`;
 
-const FACEBOOK_PROMPT = `Convert this blog post into a Facebook post. Be conversational, friendly, and engaging. Include an emoji or two and a call to action. Keep it under 500 characters.
+const FACEBOOK_PROMPT = `Convert this blog post into a Facebook post.
+
+Requirements:
+- Tone: Conversational, friendly, engaging
+- Include: An emoji or two and a call to action
+- Length: 150-300 characters
 
 Blog post:
 {blog}`;
 
-const TWITTER_PROMPT = `Convert this blog post into a punchy X/Twitter post. Be bold, concise, and use trending language if appropriate. Keep it under 500 characters.
+const TWITTER_PROMPT = `Convert this blog post into an X/Twitter post.
+
+Requirements:
+- Tone: Bold, punchy, concise
+- Include: Trending language or hashtags if appropriate
+- Length: 100-280 characters
 
 Blog post:
 {blog}`;
 
-const LINKEDIN_PROMPT = `Convert this blog post into a LinkedIn post. Be professional, insightful, and authoritative. Share a key takeaway or perspective. Keep it under 1000 characters.
+const LINKEDIN_PROMPT = `Convert this blog post into a LinkedIn post.
+
+Requirements:
+- Tone: Professional, insightful, authoritative
+- Include: A key takeaway or perspective
+- Length: 300-800 characters
 
 Blog post:
 {blog}`;
