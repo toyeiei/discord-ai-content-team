@@ -93,19 +93,17 @@ Edited draft:
 
 Return only the final polished blog post.`;
 
-const SOCIAL_PROMPT = `You are a social media strategist. Create social media posts for 3 platforms based on the following blog post.
+const SOCIAL_PROMPT = `You are a social media strategist. Create 3 social media posts based on this blog post.
 
 Blog post:
 {blog}
 
-**CRITICAL: Keep total output under 1600 characters.**
+**CRITICAL character limits:**
+- Facebook: max 320 characters
+- X/Twitter: max 280 characters
+- LinkedIn: max 900 characters
 
-Create posts for:
-1. Facebook - engaging, community-focused, up to 300 characters with relevant hashtags
-2. X/Twitter - punchy, conversational, up to 280 characters with relevant hashtags
-3. LinkedIn - professional, thought-leadership focused, up to 1000 characters with relevant hashtags
-
-Format as:
+Format exactly as:
 **Facebook:**
 [post]
 
@@ -234,20 +232,12 @@ export class ContentWorkflow extends WorkflowEntrypoint<Env, WorkflowParams> {
     await postToChannel(channels.social, '📱 **Social Phase** - Creating posts...', botToken);
     const socialContent = await miniMax.chat([{ role: 'user', content: SOCIAL_PROMPT.replace('{blog}', finalBlog) }], { maxTokens: 1600 });
     
-    // Post raw content first for debugging
-    await postToChannel(channels.social, `📱 **Social Phase Raw Output:**\n\n${socialContent}`, botToken);
-    
     const { facebook, twitter, linkedin } = parseSocialPosts(socialContent);
     
-    await postToChannel(channels.social, `✅ **Social Posts**\n\n**Facebook:**\n${facebook || '(empty)'}`, botToken);
-    await postToChannel(channels.social, `**X/Twitter:**\n${twitter || '(empty)'}`, botToken);
-    await postToChannel(channels.social, `**LinkedIn:**\n${linkedin || '(empty)'}`, botToken);
+    await postToChannel(channels.social, `📱 **Facebook** (max 320)\n${facebook || '(empty)'}`, botToken);
+    await postToChannel(channels.social, `📱 **X/Twitter** (max 280)\n${twitter || '(empty)'}`, botToken);
+    await postToChannel(channels.social, `📱 **LinkedIn** (max 900)\n${linkedin || '(empty)'}`, botToken);
     
-    const socialPosts = JSON.stringify({ facebook, twitter, linkedin });
-
-    // PUBLISH - No approval, fully autonomous
-    await postToChannel(channels.final, '🚀 **Publishing** - Uploading to GitHub Pages...', botToken);
-    const path = await publish(topic, finalBlog, socialPosts, this.env);
-    await postToChannel(channels.final, `🎉 **Published!** → GitHub Pages: \`${path}\``, botToken);
+    await postToChannel(channels.social, '✅ **Social Phase Complete**', botToken);
   }
 }
