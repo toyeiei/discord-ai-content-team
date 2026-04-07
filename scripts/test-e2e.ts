@@ -2,10 +2,11 @@
  * End-to-End Test Script for Content Pipeline
  * 
  * Tests the full workflow: Research → Draft → Edit → Final → Social (Facebook only)
- * Run: MINIMAX_API_KEY=xxx npx tsx scripts/test-e2e.ts
+ * Run: npx tsx scripts/test-e2e.ts
  */
 
 import { MiniMaxClient } from '../src/minimax';
+import { PROMPTS } from '../src/config';
 
 const CONFIG = {
   minimaxKey: process.env.MINIMAX_API_KEY!,
@@ -20,64 +21,11 @@ interface TestResult {
   error?: string;
 }
 
-// Prompts matching the actual workflow
-const RESEARCH_PROMPT = `Research the following topic thoroughly. Find key facts, statistics, recent developments, and interesting angles.
-
-Topic: {topic}
-
-**CRITICAL: Keep the summary to 150-200 words max. Be concise and focused.**`;
-
-const DRAFT_PROMPT = `You are a professional content writer. Write a blog post draft based on the following research.
-
-Topic: {topic}
-Research:
-{research}
-
-**CRITICAL: Write a draft of 180-220 words. Stay within Discord message limits (under 2000 characters).**
-
-Write a blog post with:
-- Engaging title
-- Introduction (2-3 sentences)
-- 3-4 key points with supporting details
-- Conclusion with call to action`;
-
-const EDIT_PROMPT = `You are a senior editor. Review the draft below and provide 3-5 clear, actionable revision tips.
-
-**CRITICAL: Keep your tips to 100-150 words max (under 1200 characters). Be concise.**
-
-Draft:
-{draft}
-
-Provide 3-5 specific, actionable tips to improve clarity, engagement, and impact. Use bullet points.`;
-
-const FINAL_PROMPT = `You are a professional content editor. Polish the following blog post into a final, publication-ready version.
-
-Topic: {topic}
-Original draft:
-{draft}
-
-Revision tips:
-{tips}
-
-Apply the revision tips above to improve the draft. Return the final polished blog post only - no preamble, no explanation.
-
-Length: 200-300 words.`;
-
-const FACEBOOK_PROMPT = `Convert this blog post into a Facebook post.
-
-Requirements:
-- Tone: Conversational, friendly, engaging
-- Include: An emoji or two and a call to action
-- Length: 600-800 characters
-
-Blog post:
-{blog}`;
-
 function assertNotEmpty(value: string, step: string): void {
   if (!value || value.trim().length === 0) {
     throw new Error(`${step} returned empty content`);
   }
-  if (value.length < 20) {
+  if (value.length < 50) {
     throw new Error(`${step} returned suspiciously short content: "${value}"`);
   }
 }
@@ -104,8 +52,8 @@ async function runE2ETest(): Promise<void> {
     console.log('🔍 Step 1: RESEARCH');
     const research = await miniMax.chat([{
       role: 'user',
-      content: RESEARCH_PROMPT.replace('{topic}', CONFIG.testTopic),
-    }], { maxTokens: 1600 });
+      content: PROMPTS.RESEARCH_FALLBACK.replace('{topic}', CONFIG.testTopic),
+    }], { maxTokens: 2000 });
     
     assertNotEmpty(research, 'Research');
     results.push({ step: 'Research', passed: true, duration: Date.now() - researchStart, output: research });
@@ -123,8 +71,8 @@ async function runE2ETest(): Promise<void> {
     console.log('✍️  Step 2: DRAFT');
     const draft = await miniMax.chat([{
       role: 'user',
-      content: DRAFT_PROMPT.replace('{topic}', CONFIG.testTopic).replace('{research}', research),
-    }], { maxTokens: 2000 });
+      content: PROMPTS.DRAFT.replace('{topic}', CONFIG.testTopic).replace('{research}', research),
+    }], { maxTokens: 2500 });
     
     assertNotEmpty(draft, 'Draft');
     results.push({ step: 'Draft', passed: true, duration: Date.now() - draftStart, output: draft });
@@ -142,8 +90,8 @@ async function runE2ETest(): Promise<void> {
     console.log('🔍 Step 3: EDIT');
     const edited = await miniMax.chat([{
       role: 'user',
-      content: EDIT_PROMPT.replace('{draft}', draft),
-    }], { maxTokens: 1200 });
+      content: PROMPTS.EDIT.replace('{draft}', draft),
+    }], { maxTokens: 2500 });
     
     assertNotEmpty(edited, 'Edit');
     results.push({ step: 'Edit', passed: true, duration: Date.now() - editStart, output: edited });
@@ -161,8 +109,8 @@ async function runE2ETest(): Promise<void> {
     console.log('✨ Step 4: FINAL');
     const finalBlog = await miniMax.chat([{
       role: 'user',
-      content: FINAL_PROMPT.replace('{topic}', CONFIG.testTopic).replace('{draft}', draft).replace('{tips}', edited),
-    }], { maxTokens: 1600 });
+      content: PROMPTS.FINAL.replace('{topic}', CONFIG.testTopic).replace('{draft}', edited).replace('{feedback}', ''),
+    }], { maxTokens: 2500 });
     
     assertNotEmpty(finalBlog, 'Final');
     results.push({ step: 'Final', passed: true, duration: Date.now() - finalStart, output: finalBlog });
@@ -177,13 +125,12 @@ async function runE2ETest(): Promise<void> {
   // Step 5: SOCIAL (Facebook only)
   const socialResults: TestResult[] = [];
   
-  // Facebook
   const fbStart = Date.now();
   try {
     console.log('📱 Step 5: SOCIAL - Facebook');
     const facebook = await miniMax.chat([{
       role: 'user',
-      content: FACEBOOK_PROMPT.replace('{blog}', finalBlog),
+      content: PROMPTS.FACEBOOK.replace('{blog}', finalBlog),
     }], { maxTokens: 1000 });
     
     assertNotEmpty(facebook, 'Facebook');
@@ -203,7 +150,7 @@ async function runE2ETest(): Promise<void> {
   
   allSteps.forEach(r => {
     const status = r.passed ? '✅' : '❌';
-    const icon = r.step === 'Facebook' || r.step === 'X/Twitter' || r.step === 'LinkedIn' ? '  ' : '';
+    const icon = r.step === 'Facebook' ? '  ' : '';
     console.log(`${icon}${status} ${r.step}: ${r.duration}ms${r.error ? ` - ${r.error}` : ''}`);
   });
 

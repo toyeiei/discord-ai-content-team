@@ -27,73 +27,90 @@ export const EXA_CONFIG = {
 // ---------------------------------------------------------------------------
 
 export const PROMPTS = {
-  RESEARCH_WITH_EXA: `You are a research analyst. Based on the following web search results, create a concise research summary for a blog post.
+  RESEARCH_WITH_EXA: `You are a research analyst. Based on the following web search results, create a detailed research summary for a blog post.
 
 Search Results:
 {summary}
 
 Topic: {topic}
 
-**CRITICAL: Keep the summary to 150-200 words max. Be concise and focused.**
+Write a comprehensive research summary with:
+- Key findings and insights
+- 4-6 main points to cover in the blog post
+- Important statistics, facts, or quotes
+- Any relevant context or background
+
+Aim for 200-300 words. Be thorough but focused.`,
+
+  RESEARCH_FALLBACK: `You are a research analyst. Research the following topic thoroughly and provide a detailed summary.
+
+Topic: {topic}
 
 Provide:
-- Key findings (bullet list)
-- Top 3-5 points to cover in the blog
-- Any important statistics or facts
+- Key facts and statistics
+- Recent developments and trends
+- Interesting angles and perspectives
+- 4-6 main points to cover
 
-Use bullet points and keep it brief.`,
+Aim for 200-300 words. Be thorough and informative.`,
 
-  RESEARCH_FALLBACK: `Research the following topic thoroughly. Find key facts, statistics, recent developments, and interesting angles.
-
-Topic: {topic}
-
-**CRITICAL: Keep the summary to 150-200 words max. Be concise and focused.**`,
-
-  DRAFT: `You are a professional content writer. Write a blog post draft based on the following research.
+  DRAFT: `You are a professional content writer. Write a complete blog post based on the research below.
 
 Topic: {topic}
+
 Research:
 {research}
 
-**CRITICAL: Write a draft of 180-220 words. Stay within Discord message limits (under 2000 characters).**
+Requirements:
+- Write a full blog post (300-500 words)
+- Include an engaging title
+- Introduction paragraph (2-3 sentences)
+- 3-4 body paragraphs with key points and supporting details
+- Conclusion with call to action
 
-Write a blog post with:
-- Engaging title
-- Introduction (2-3 sentences)
-- 3-4 key points with supporting details
-- Conclusion with call to action`,
+Make it informative, engaging, and ready for publication.`,
 
-  EDIT: `You are a senior editor. Review the draft below and provide 3-5 clear, actionable revision tips.
+  EDIT: `You are a senior editor. Improve the following blog post draft.
 
-**CRITICAL: Keep your tips to 100-150 words max (under 1200 characters). Be concise.**
-
-Draft:
+Original Draft:
 {draft}
 
-Provide 3-5 specific, actionable tips to improve clarity, engagement, and impact. Use bullet points.`,
+Your task:
+1. Fix any grammar, spelling, or clarity issues
+2. Strengthen weak sentences or paragraphs
+3. Improve flow and transitions
+4. Ensure the tone is consistent and engaging
+5. Return the improved version in full
 
-  FINAL: `You are a professional content editor. Polish the following blog post into a final, publication-ready version.
+Return ONLY the improved blog post, no explanations.`,
+
+  FINAL: `You are a professional content editor. Create a polished, publication-ready version of this blog post.
 
 Topic: {topic}
-Original draft:
+
+Original Draft:
 {draft}
 
-Revision tips:
-{tips}
+Editor Feedback:
+{feedback}
 
-Apply the revision tips above to improve the draft. Return the final polished blog post only - no preamble, no explanation.
+Apply the feedback to improve the draft. Return the final version only - no preamble or explanation.
 
-Length: 200-300 words.`,
+Target: 300-450 words.`,
 
-  FACEBOOK: `Convert this blog post into a Facebook post.
+  FACEBOOK: `Convert this blog post into an engaging Facebook post.
+
+Blog Post:
+{blog}
 
 Requirements:
-- Tone: Conversational, friendly, engaging
-- Include: An emoji or two and a call to action
-- Length: 600-800 characters
+- Conversational, friendly tone
+- Include 1-2 emojis and a call to action
+- 150-300 characters
+- Make it scannable and engaging for Facebook feed
 
-Blog post:
-{blog}`,
+Return ONLY the Facebook post text.`,
+
 } as const;
 
 // ---------------------------------------------------------------------------

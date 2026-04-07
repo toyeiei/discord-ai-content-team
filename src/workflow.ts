@@ -67,17 +67,21 @@ export class ContentWorkflow extends WorkflowEntrypoint<Env, WorkflowParams> {
 
     // EDIT
     const edited = await step.do('edit', async () => {
-      await postToChannel(channels.edit, '🔍 **Edit Phase** - Reviewing...', botToken);
-      return await miniMax.chat([{ role: 'user', content: PROMPTS.EDIT.replace('{draft}', draft) }], { maxTokens: 1200 });
+      await postToChannel(channels.edit, '🔍 **Edit Phase** - Improving draft...', botToken);
+      const result = await miniMax.chat([{ role: 'user', content: PROMPTS.EDIT.replace('{draft}', draft) }], { maxTokens: 2500 });
+      if (!result || result.trim().length < 50) {
+        throw new Error('Edit phase returned insufficient content');
+      }
+      return result;
     });
     await postToChannel(channels.edit, `✅ **Edit Phase Complete**\n\n${edited}\n\n_Word count: ${countWords(edited)} | Characters: ~${countCharacters(edited)}_`, botToken);
 
     // FINAL
     const finalBlog = await step.do('final', async () => {
       await postToChannel(channels.final, '✨ **Final Phase** - Polishing...', botToken);
-      const result = await miniMax.chat([{ role: 'user', content: PROMPTS.FINAL.replace('{topic}', topic).replace('{draft}', draft).replace('{tips}', edited) }], { maxTokens: 2000 });
-      if (!result || result.trim().length === 0) {
-        throw new Error('Final phase returned empty content');
+      const result = await miniMax.chat([{ role: 'user', content: PROMPTS.FINAL.replace('{topic}', topic).replace('{draft}', edited).replace('{feedback}', '') }], { maxTokens: 2500 });
+      if (!result || result.trim().length < 50) {
+        throw new Error('Final phase returned insufficient content');
       }
       return result;
     });
