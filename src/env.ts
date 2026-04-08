@@ -18,6 +18,7 @@ export interface Env {
   EDIT_CHANNEL_ID: string;
   FINAL_CHANNEL_ID: string;
   SOCIAL_CHANNEL_ID: string;
+  PUBLISH_CHANNEL_ID: string;
 }
 
 export interface WorkflowChannels {
@@ -26,4 +27,5 @@ export interface WorkflowChannels {
   edit: string;
   final: string;
   social: string;
+  publish: string;
 }

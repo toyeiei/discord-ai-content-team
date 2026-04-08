@@ -105,7 +105,7 @@ export class ContentWorkflow extends WorkflowEntrypoint<Env, WorkflowParams> {
     await postApprovalMessage(channels.final, botToken);
 
     // Wait for approval
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const approvalEvent = await step.waitForEvent<{ approved?: boolean }>('approval', {
       type: 'approval',
       timeout: 86400, // 24 hours
@@ -119,6 +119,8 @@ export class ContentWorkflow extends WorkflowEntrypoint<Env, WorkflowParams> {
     }
 
     // PUBLISH
+    const githubPagesUrl = 'https://toyeiei.github.io/discord-ai-content-team/';
+
     await step.do('publish', async () => {
       await postToChannel(channels.final, '🚀 **Publish Phase** - Pushing to GitHub Pages...', botToken);
 
@@ -140,5 +142,8 @@ export class ContentWorkflow extends WorkflowEntrypoint<Env, WorkflowParams> {
       await postToChannel(channels.final, `✅ **Published!**\n📝 Post: \`${slug}\`\n🔗 Check your GitHub Pages site.`, botToken);
       return slug;
     });
+
+    // Send to publish channel
+    await postToChannel(channels.publish, `🎉 **New Post Published!**\n\n📝 **Topic:** ${topic}\n🔗 **Read it here:** ${githubPagesUrl}`, botToken);
   }
 }

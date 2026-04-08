@@ -46,6 +46,7 @@ export class DiscordSlashHandler {
       edit: this.env.EDIT_CHANNEL_ID,
       final: this.env.FINAL_CHANNEL_ID,
       social: this.env.SOCIAL_CHANNEL_ID,
+      publish: this.env.PUBLISH_CHANNEL_ID,
     };
 
     const instanceId = `workflow-${userId}-${Date.now()}`;
