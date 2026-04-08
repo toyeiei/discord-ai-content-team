@@ -22,6 +22,7 @@ export interface WorkflowParams {
 
 export class ContentWorkflow extends WorkflowEntrypoint<Env, WorkflowParams> {
   async run(event: WorkflowEvent<WorkflowParams>, step: WorkflowStep) {
+    const instanceId = event.instanceId;
     const { topic: rawTopic, channels } = event.payload;
     const topic = sanitizeTopic(rawTopic);
 
