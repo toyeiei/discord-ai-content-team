@@ -25,12 +25,12 @@ export class ContentWorkflow extends WorkflowEntrypoint<Env, WorkflowParams> {
     const { topic: rawTopic, channels } = event.payload;
     const topic = sanitizeTopic(rawTopic);
 
-    if (!this.env.MINIMAX_API_KEY) {
-      await postToChannel(channels.research, '❌ **ERROR**: MINIMAX_API_KEY not configured. Please set it via `wrangler secret put MINIMAX_API_KEY`', this.env.DISCORD_BOT_TOKEN);
-      throw new Error('MINIMAX_API_KEY not configured');
+    if (!this.env.OPENAI_API_KEY) {
+      await postToChannel(channels.research, '❌ **ERROR**: OPENAI_API_KEY not configured. Please set it via `wrangler secret put OPENAI_API_KEY`', this.env.DISCORD_BOT_TOKEN);
+      throw new Error('OPENAI_API_KEY not configured');
     }
 
-    const aiClient = new AIChatClient(this.env.MINIMAX_API_KEY);
+    const aiClient = new AIChatClient(this.env.OPENAI_API_KEY);
     const botToken = this.env.DISCORD_BOT_TOKEN;
 
     // RESEARCH

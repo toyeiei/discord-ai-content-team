@@ -6,7 +6,7 @@ export interface Env {
     };
   };
   CACHE: KVNamespace;
-  MINIMAX_API_KEY: string;
+  OPENAI_API_KEY: string;
   DISCORD_BOT_TOKEN: string;
   DISCORD_APP_ID: string;
   DISCORD_PUBLIC_KEY: string;

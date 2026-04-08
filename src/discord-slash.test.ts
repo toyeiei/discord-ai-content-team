@@ -10,7 +10,7 @@ describe('DiscordSlashHandler', () => {
 
   const makeEnv = (): Env =>
     ({
-      MINIMAX_API_KEY: 'minimax-key',
+      OPENAI_API_KEY: 'minimax-key',
       DISCORD_BOT_TOKEN: 'discord-bot-token',
       DISCORD_APP_ID: 'discord-app-id',
       DISCORD_PUBLIC_KEY: 'discord-public-key',

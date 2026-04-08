@@ -32,13 +32,13 @@ export default {
     }
 
     if (url.pathname === '/test-minimax' && request.method === 'GET') {
-      if (!env.MINIMAX_API_KEY) {
-        return Response.json({ error: 'MINIMAX_API_KEY not configured' }, { status: 500 });
+      if (!env.OPENAI_API_KEY) {
+        return Response.json({ error: 'OPENAI_API_KEY not configured' }, { status: 500 });
       }
       try {
         const res = await fetch('https://api.minimax.io/v1/text/chatcompletion_v2', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.MINIMAX_API_KEY}` },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.OPENAI_API_KEY}` },
           body: JSON.stringify({
             model: 'MiniMax-M2.7',
             messages: [{ role: 'user', content: 'Say "OK"' }],
