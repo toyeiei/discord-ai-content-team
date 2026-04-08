@@ -145,4 +145,57 @@ describe('DiscordSlashHandler', () => {
     expect(response.type).toBe(4);
     expect((response.data as any).content).toContain('cancel');
   });
+
+  it('handleButton parses instance ID from custom_id and sends approval event', async () => {
+    const env = makeEnv();
+    const handler = new DiscordSlashHandler(env);
+    const mockSendEvent = vi.fn().mockResolvedValue(undefined);
+    env.CONTENT_WORKFLOW.get = vi.fn().mockResolvedValue({ sendEvent: mockSendEvent });
+
+    const response = await handler.handleButton({
+      type: 3,
+      token: 'token',
+      data: { custom_id: 'publish_approve:workflow-user-123-1234567890' },
+      member: { user: { id: 'user-123', username: 'neo' } },
+    } satisfies DiscordInteraction);
+
+    expect(response.type).toBe(7);
+    expect((response.data as any).content).toContain('Approved');
+    expect(env.CONTENT_WORKFLOW.get).toHaveBeenCalledWith('workflow-user-123-1234567890');
+    expect(mockSendEvent).toHaveBeenCalledWith({ type: 'approval', payload: { approved: true } });
+  });
+
+  it('handleButton parses instance ID for revise', async () => {
+    const env = makeEnv();
+    const handler = new DiscordSlashHandler(env);
+    const mockSendEvent = vi.fn().mockResolvedValue(undefined);
+    env.CONTENT_WORKFLOW.get = vi.fn().mockResolvedValue({ sendEvent: mockSendEvent });
+
+    const response = await handler.handleButton({
+      type: 3,
+      token: 'token',
+      data: { custom_id: 'publish_revise:workflow-user-123-1234567890' },
+      member: { user: { id: 'user-123', username: 'neo' } },
+    } satisfies DiscordInteraction);
+
+    expect(response.type).toBe(7);
+    expect((response.data as any).content).toContain('cancelled');
+    expect(env.CONTENT_WORKFLOW.get).toHaveBeenCalledWith('workflow-user-123-1234567890');
+    expect(mockSendEvent).toHaveBeenCalledWith({ type: 'approval', payload: { approved: false } });
+  });
+
+  it('handleButton returns error when custom_id has no instance ID', async () => {
+    const env = makeEnv();
+    const handler = new DiscordSlashHandler(env);
+
+    const response = await handler.handleButton({
+      type: 3,
+      token: 'token',
+      data: { custom_id: 'publish_approve' },
+      member: { user: { id: 'user-123', username: 'neo' } },
+    } satisfies DiscordInteraction);
+
+    expect(response.type).toBe(4);
+    expect((response.data as any).content).toContain('Could not find');
+  });
 });

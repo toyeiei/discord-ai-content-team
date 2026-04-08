@@ -1,4 +1,4 @@
-import { postToChannel, postInstanceId, findInstanceIdInThread } from './discord';
+import { postToChannel, postInstanceId } from './discord';
 import type { Env, WorkflowChannels } from './env';
 import type { DiscordInteraction } from './discord';
 import { sanitizeTopic } from './config';
@@ -22,11 +22,17 @@ export class DiscordSlashHandler {
   }
 
   async handleButton(body: DiscordInteraction): Promise<{ type: number; data?: Record<string, unknown> }> {
-    switch (body.data?.custom_id) {
-      case 'approve': return this.handleApprove(body);
-      case 'revise': return this.handleRevise(body);
-      case 'publish_approve': return this.handlePublishApprove(body);
-      case 'publish_revise': return this.handlePublishRevise(body);
+    const customId = body.data?.custom_id || '';
+
+    // Parse instance ID from custom_id format: "action:instanceId"
+    const instanceId = customId.includes(':') ? customId.split(':').slice(1).join(':') : null;
+    const action = customId.includes(':') ? customId.split(':')[0] : customId;
+
+    switch (action) {
+      case 'approve': return this.handleApprove(instanceId);
+      case 'revise': return this.handleRevise(instanceId);
+      case 'publish_approve': return this.handlePublishApprove(instanceId);
+      case 'publish_revise': return this.handlePublishRevise(instanceId);
       default: return this.ephemeral('Unknown action');
     }
   }
@@ -69,12 +75,9 @@ export class DiscordSlashHandler {
     return this.ephemeral('To cancel, the workflow will timeout after 24 hours if not approved.');
   }
 
-  private async handleApprove(body: DiscordInteraction): Promise<{ type: number; data?: Record<string, unknown> }> {
-    const channelId = body.channel_id || '';
-    const instanceId = await findInstanceIdInThread(channelId, this.env.DISCORD_BOT_TOKEN);
-
+  private async handleApprove(instanceId: string | null): Promise<{ type: number; data?: Record<string, unknown> }> {
     if (!instanceId) {
-      return this.ephemeral('Could not find workflow instance. Make sure you are in the #final channel.');
+      return this.ephemeral('Could not find workflow instance.');
     }
 
     try {
@@ -86,12 +89,9 @@ export class DiscordSlashHandler {
     }
   }
 
-  private async handleRevise(body: DiscordInteraction): Promise<{ type: number; data?: Record<string, unknown> }> {
-    const channelId = body.channel_id || '';
-    const instanceId = await findInstanceIdInThread(channelId, this.env.DISCORD_BOT_TOKEN);
-
+  private async handleRevise(instanceId: string | null): Promise<{ type: number; data?: Record<string, unknown> }> {
     if (!instanceId) {
-      return this.ephemeral('Could not find workflow instance. Make sure you are in the #final channel.');
+      return this.ephemeral('Could not find workflow instance.');
     }
 
     try {
@@ -103,12 +103,9 @@ export class DiscordSlashHandler {
     }
   }
 
-  private async handlePublishApprove(body: DiscordInteraction): Promise<{ type: number; data?: Record<string, unknown> }> {
-    const channelId = body.channel_id || '';
-    const instanceId = await findInstanceIdInThread(channelId, this.env.DISCORD_BOT_TOKEN);
-
+  private async handlePublishApprove(instanceId: string | null): Promise<{ type: number; data?: Record<string, unknown> }> {
     if (!instanceId) {
-      return this.ephemeral('Could not find workflow instance. Make sure you are in the #final channel.');
+      return this.ephemeral('Could not find workflow instance.');
     }
 
     try {
@@ -120,12 +117,9 @@ export class DiscordSlashHandler {
     }
   }
 
-  private async handlePublishRevise(body: DiscordInteraction): Promise<{ type: number; data?: Record<string, unknown> }> {
-    const channelId = body.channel_id || '';
-    const instanceId = await findInstanceIdInThread(channelId, this.env.DISCORD_BOT_TOKEN);
-
+  private async handlePublishRevise(instanceId: string | null): Promise<{ type: number; data?: Record<string, unknown> }> {
     if (!instanceId) {
-      return this.ephemeral('Could not find workflow instance. Make sure you are in the #final channel.');
+      return this.ephemeral('Could not find workflow instance.');
     }
 
     try {

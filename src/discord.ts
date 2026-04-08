@@ -126,6 +126,9 @@ export async function findInstanceIdInThread(threadId: string, botToken: string)
 }
 
 export async function postApprovalMessage(channelId: string, botToken: string, workflowId?: string): Promise<void> {
+  const approveId = workflowId ? `publish_approve:${workflowId}` : 'publish_approve';
+  const reviseId = workflowId ? `publish_revise:${workflowId}` : 'publish_revise';
+
   const components = [
     {
       type: 1,
@@ -134,13 +137,13 @@ export async function postApprovalMessage(channelId: string, botToken: string, w
           type: 2,
           style: 3,
           label: 'Approve',
-          custom_id: 'publish_approve',
+          custom_id: approveId,
         },
         {
           type: 2,
           style: 4,
           label: 'Revise',
-          custom_id: 'publish_revise',
+          custom_id: reviseId,
         },
       ],
     },
